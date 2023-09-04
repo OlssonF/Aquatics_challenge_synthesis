@@ -1,6 +1,7 @@
 # Get model_id for this years submissions
 
 library(tidyverse)
+library(lubridate)
 `%nin%` = Negate(`%in%`)
 
 scores_s3 <- arrow::s3_bucket("neon4cast-scores/parquet/aquatics/",
@@ -26,7 +27,7 @@ submissions <- this_year |>
   group_by(model_id) |>
   summarise(most_recent = max(reference_datetime),
             n_submissions = n()) |>
-  filter(n_submissions >= length(forecast_dates)/2)
+  filter(n_submissions >= length(forecast_dates)/3)
 
 
 xgboost_ids <- unique(submissions$model_id)[str_detect(unique(submissions$model_id), 'xgboost')]
