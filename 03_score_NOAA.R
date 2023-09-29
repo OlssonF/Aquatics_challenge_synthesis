@@ -1,5 +1,6 @@
 library(tidyverse)
 library(score4cast)
+library(lubridate)
 source('R/score_weather.R')
 
 
@@ -11,24 +12,26 @@ dates <- seq.Date(as_date('2023-01-01'), Sys.Date(), 'day')
 scored_forecasts <-
   arrow::open_dataset('scores') |>
   filter(model_id == 'NOAA') |>
-  distinct(reference_datetime) |>
+  distinct(reference_datetime, site_id) |>
   collect() |>
   mutate(reference_datetime = as_date(reference_datetime))
-
-to_score <- dates[-which(scored_forecasts$reference_datetime %in% dates)]
 
 # 3. Generate list of forecasts to be scored
 aquatic_sites <- arrow::open_dataset('scores') |>
   distinct(site_id) |>
   pull()
 
-site_dates <- expand.grid(site_id = aquatic_sites, reference_datetime = to_score)
+site_dates <- expand.grid(site_id = aquatic_sites, 
+                          reference_datetime = dates)
+
+to_score <- site_dates |> 
+  anti_join(scored_forecasts)
 
 # Loop through all site-date combos to score
-for (i in 1:nrow(site_dates)) {
+for (i in 1:nrow(to_score)) {
   # get the forecast
-  forecast_date <- site_dates$reference_datetime[i]
-  site <- site_dates$site_id[i]
+  forecast_date <- to_score$reference_datetime[i]
+  site <- to_score$site_id[i]
 
   stage_2 <- neon4cast::noaa_stage2(start_date = forecast_date) |>
     filter(site_id == site) |>
@@ -42,7 +45,7 @@ for (i in 1:nrow(site_dates)) {
 
     # compare with the mean prediction (as if it were the observation)
     group_by(datetime, site_id, variable) |>
-    summarise(prediction = mean(prediction)) |>
+    summarise(prediction = mean(prediction), .groups = 'drop') |>
     rename(observation = prediction)
 
 
@@ -52,5 +55,5 @@ for (i in 1:nrow(site_dates)) {
 
   arrow::write_dataset(scores, path = 'scores', format = 'parquet',
                        partitioning=c("model_id", "site_id"))
-  message('scored ', site, ' ', forecast_date)
+  message(i, ' ---- scored ', site, ' ', forecast_date, ' ----')
 }
