@@ -54,6 +54,6 @@ for (i in 1:nrow(to_score)) {
            date = as_date(datetime))
 
   arrow::write_dataset(scores, path = 'scores', format = 'parquet',
-                       partitioning=c("model_id", "site_id"))
+                       partitioning=c("model_id", "site_id", "reference_datetime"))
   message(i, ' ---- scored ', site, ' ', forecast_date, ' ----')
 }
