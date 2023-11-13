@@ -1,0 +1,334 @@
+---
+title: "Preliminary aquatic challenge synthesis"
+output: html_document
+date: "2023-10-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(arrow)
+library(lubridate)
+library(tidytext)
+
+
+cols_modeltype <- c('empirical' = "#482576FF",
+          'multi-model ensemble' =  "#35608DFF",
+          'process' = "#21908CFF",
+          'ML' = '#BBDF27FF',
+          'null' = '#43BF71FF')
+```
+
+## Inventory of submissions
+
+To start we can look at what the submissions look like, number of teams, general characteristics, which variables and sites were forecasted etc. Some of this might go in the methods and/or results.
+
+```{r message=FALSE}
+# read the metadata from the google sheet
+googlesheets4::gs4_deauth() 
+model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing", sheet = 'descriptions') |> 
+  mutate(unc_driver = ifelse(uses_NOAA == 1, 1, 0)) |> 
+  na.omit(variable)
+```
+
+What and where was forecasted?
+
+```{r}
+scores <- arrow::open_dataset(file.path(here::here(),"scores")) |> 
+  filter(model_id %in% model_meta$model_id)
+
+distinct_submissions <- scores |> 
+  distinct(site_id, variable, model_id) |> 
+  collect()
+
+head(distinct_submissions)
+```
+
+How many sites did each model forecast?
+
+```{r}
+distinct_submissions |> 
+  group_by(model_id) |> 
+  distinct(site_id) |> 
+  summarise(site_n = n()) |> 
+  group_by(site_n) |> 
+  summarise(n_models = n())
+```
+
+How many variables did each model forecast?
+
+```{r}
+distinct_submissions |> 
+  group_by(model_id) |> 
+  distinct(variable) |> 
+  summarise(variable_n = n()) |> 
+  group_by(variable_n) |> 
+  summarise(n_models = n())
+```
+
+When assessing model performance we can look at raw scores (CRPS) or skill - score relative to a null model. We can use the climatology null model to calculate the skill scores for each model
+
+```{r}
+lake_sites <- c('BARC', 'CRAM', 'LIRO', 'PRLA', 'PRPO', 'SUGG', 'TOOK')
+
+# extract just the climatology scores
+climatology_lake <- scores |>
+  filter(model_id == 'climatology', 
+         site_id %in% lake_sites,
+         variable == 'temperature') |>
+  collect() |> 
+  select(reference_datetime, datetime, crps, logs, site_id, model_id, variable) |> 
+  arrange(reference_datetime, datetime, site_id) |> 
+  pivot_wider(values_from = c(crps, logs),
+              names_from = model_id)
+
+# get the model scores
+lake_scores <- scores |>
+  filter(site_id %in% lake_sites,
+         model_id %in% model_meta$model_id,
+         variable == 'temperature') |>
+  collect()
+
+# Calculate the skill scores
+lake_skill <- lake_scores |>
+  filter(model_id != 'climatology') |> 
+  select(reference_datetime, datetime, crps, logs, site_id, model_id, variable) |> 
+  full_join(climatology_lake, by = c('reference_datetime', 'datetime', 'site_id', 'variable')) |> 
+  
+  # calcaulte the skill relative to climatology (- is bad, + is good)
+  mutate(skill_crps = crps_climatology - crps,
+         skill_logs = logs_climatology - logs,
+         horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
+  # consistent forecast period
+  filter(horizon <= 30,
+         horizon >= 1) |> 
+  arrange(reference_datetime, site_id, datetime, model_id) 
+
+```
+
+### Model structure
+
+Looking at the structure of the forecast models. Are they dynamic, include initial conditions, update parameters or use data assimilation?
+
+```{r}
+# Aspects of DA
+# do the forecasts contain initial conditions?
+model_meta |> 
+  summarise(initial_cond = sum(initial_cond, na.rm = T),
+            # do the forecast models update parameters?
+            updates_parameters = sum(updates_parameters, na.rm = T),
+            # is the forecast 'dynamic'?
+            dynamic = sum(dynamic, na.rm = T))
+```
+
+How does model structure relate to performance?
+
+```{r}
+lake_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |> 
+  ungroup() |> 
+  slice_max(mean_skill, n= 10, na_rm = T) |> 
+  left_join(model_meta) |> 
+  mutate(model_id = fct_reorder(model_id, mean_skill)) |>
+  ggplot(aes(x=mean_skill, 
+             y = model_id,
+             fill = model_type)) +
+  geom_bar(stat = 'identity') +
+  tidytext::scale_y_reordered() +
+  labs(y='model_id', x = 'mean CRPS skill (vs climatology)') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_x_continuous(limits = c(-0.2,0.2),
+                     breaks = c(-0.2,-0.1,0,0.1,0.2))+
+  theme_bw()
+
+```
+
+But the best models (and model types) are not consistent across sites. Looking at the individual sites:
+
+```{r}
+lake_skill |> 
+  group_by(model_id, site_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  group_by(site_id) |> 
+  slice_max(mean_crps, n = 5, na_rm = T) |> 
+  mutate(model_id = fct_reorder(model_id, desc(mean_crps))) |>
+  left_join(model_meta) |> 
+  ggplot(aes(x=mean_crps, 
+             y = reorder_within(x = model_id, within = site_id, by = mean_crps),
+             fill = model_type)) +
+  geom_bar(stat = 'identity') +
+  scale_y_reordered() +
+  scale_fill_manual(values = cols_modeltype) +
+  facet_wrap(~site_id, scales = 'free_y', ncol = 2) +
+  labs(y='model_id', x = 'mean CRPS skill (vs climatology)') +
+  geom_vline(xintercept = 0)
+```
+
+We can also look at how this varies across the forecast horizon. For one site it might look like this:
+
+```{r}
+# first find the top models
+SUGG_mods <- 
+  lake_skill |> 
+  filter(site_id == 'SUGG') |> 
+  mutate(horizon = datetime - as_date(reference_datetime)) |> 
+  group_by(model_id) |> 
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |> 
+  slice_max(mean_skill, n = 10, na_rm = T)
+  
+  
+lake_skill |> 
+  filter(site_id == 'SUGG',
+         model_id %in% SUGG_mods$model_id) |> 
+  mutate(horizon = datetime - as_date(reference_datetime)) |> 
+  group_by(model_id, horizon, site_id) |> 
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |>
+  left_join(model_meta)  |> 
+  
+  ggplot(aes(x=horizon, y=mean_skill, colour = model_id)) +
+  geom_line() +
+  facet_wrap(~site_id) +
+  geom_hline(yintercept = 0) +
+  theme_bw()
+```
+
+Generally forecast skill reduces across the horizon, with more models beating climatology null at shorter horizons and only a few at longer horizons. For SUGG example, cb_prophet and tg_randfor are the only ones to be skillful across the full horizon.
+
+Another way to think about this would be to look at generally how do model types do across all site? Or how do all our models do at forecasting particular site? Are some sites more "forecastable" than others?
+
+We can look at the top 10 models on average to see how they do overall and at each site.
+
+```{r}
+# top 10 average models
+top_mods <- lake_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  ungroup() |> 
+  slice_max(mean_crps, n = 10, na_rm = T) |> 
+  distinct(model_id)
+
+lake_scores |> 
+  left_join(model_meta, by = 'model_id') |>
+  filter(model_id %in% top_mods$model_id) |>
+  ggplot(aes(x=crps, y = model_type)) +
+  geom_violin(aes(colour = model_type))
+
+lake_scores |> 
+  left_join(model_meta, by = 'model_id') |> 
+  filter(model_id %in% top_mods$model_id) |>
+  # group_by(model_type, site_id) |> 
+  # summarise(mean_crps = mean(crps, na.rm = T)) |> 
+  # mutate(model_type = fct_reorder(model_type, desc(mean_crps))) |>
+  ggplot(aes(x=crps, y = model_type)) +
+  geom_violin(aes(colour = model_type)) +  
+  facet_wrap(~site_id)
+
+```
+
+### Uncertainty representation
+
+The uncertainty each model represents might be an interesting characteristic to investigate how skill varies?
+
+```{r}
+# types of uncertainty represented
+# Number of models that contain each type
+model_meta |> 
+  summarise(across(contains('unc'), ~ sum(.x, na.rm = T)))
+
+```
+
+Driver uncertainty is the most common type included and initial condition uncertainty the least common. Most forecasts only include one type of uncertainty.
+
+```{r}
+# How many sources are represented in each model?
+model_meta |> 
+  select(model_id, contains('unc_')) |> 
+  mutate(unc_n = rowSums(pick(where(is.numeric)))) |> 
+  group_by(unc_n) |> 
+  summarise(n = n())
+```
+
+Most forecasts only represent one source of uncertainty (usually driver), but a good number also include multiple sources of uncertainty.
+
+### NOAA weather covariates
+
+I've also looked at what weather covariates are used in each model from those available from NOAA. No model uses covaraite drivers other than NOAA weather forecasts.
+
+```{r}
+NOAA_vars <- c('air_temperature',
+               'air_pressure',
+               'relative_humidity',
+               'surface_downwelling_longwave_flux_in_air',
+               'surface_downwelling_shortwave_flux_in_air', 
+               'precipitation_flux',
+               'eastward_wind',
+               'northward_wind')
+
+NOAA_summary <- model_meta |> 
+  select(model_id) 
+
+
+for (i in 1:length(NOAA_vars)) {
+  detect_var <- NOAA_vars[i]
+  
+  NOAA_summary <- 
+    NOAA_summary |> 
+    mutate(detect_var = str_detect(model_meta$NOAA_var, detect_var)) 
+  
+  colnames(NOAA_summary)[1 + i] <- detect_var
+}
+
+```
+
+Summarising the driver variables to see how many models use each of the variables. Air temperature being the most common driver variable followed by short wave radiation.
+
+```{r}
+NOAA_summary |> 
+  select(-model_id) |> 
+  summarise_all(~sum(.x, na.rm = T)) |> 
+  pivot_longer(cols = everything(),
+               names_to = 'NOAA_vars', 
+               values_to = 'n_models') |> 
+  arrange(desc(n_models))
+
+```
+
+We also see that many models use just this single driver variable, with the next common to use all 8 (in many of the complex process models).
+
+```{r}
+NOAA_summary |> 
+  mutate(vars_n = rowSums(pick(where(is.logical)))) |> 
+  group_by(vars_n) |> 
+  summarise(n_models = n()) |> 
+  arrange(desc(n_models))
+
+```
+
+In addition to looking at how each of these models performs and looking at relationships with the driver variable and number of drivers used, I also started to think about how this relates to the performance of the NOAA forecasts themselves. Does the skill of the aquatic forecasts mirror the driver variables that are included in the model?
+
+### NOAA forecast performance
+
+```{r eval = F}
+NOAA_scores <- arrow::open_dataset(file.path(here::here(),"scores")) |> 
+  filter(model_id == 'NOAA_daily',
+         site_id %in% c('ARIK', 'BARC', 'BLDE'),
+         variable %in% c('air_temperature', 'eastward_wind')) |> 
+  collect()
+
+NOAA_scores |> 
+  mutate(horizon = as.numeric(datetime - as_date(reference_datetime))) |> 
+  filter(horizon <= 30) |> 
+  group_by(site_id, variable, horizon) |> 
+  summarise(crps = mean(crps, na.rm = T)) |>
+  ggplot(aes(x=horizon, y=crps, colour = site_id)) +
+  geom_line() +
+  facet_wrap(~variable)
+```
+
+## Things to think about
+
+1.  Are all models equally represented? To make them comparable.
+2.  Same with sites? Do we have the same number of days/models etc.?
+3.  What to do about models that don't forecast all sites?
