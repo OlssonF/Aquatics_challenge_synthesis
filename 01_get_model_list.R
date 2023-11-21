@@ -29,6 +29,6 @@ scores_s3 |>
   dplyr::filter(reference_datetime %in% forecast_dates,
                 variable %in% variables,
                 model_id %in% model_meta$model_id) |>
-  arrow::write_dataset("scores", partitioning=c("model_id", "site_id"))
+  arrow::write_dataset("scores_rescored", partitioning=c("model_id", "site_id"))
 
 #====================================================================#
