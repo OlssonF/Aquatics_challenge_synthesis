@@ -2,7 +2,8 @@ library(tidyverse)
 # inventory
 googlesheets4::gs4_deauth()
 model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing") |> 
-  mutate(unc_driver = ifelse(uses_NOAA == 1, 1, 0))
+  mutate(unc_driver = ifelse(uses_NOAA == 1, 1, 0)) |> 
+  filter(!is.na(model_type))
 
 # types of uncertainty represented
 # Number of models that contain each type
@@ -27,7 +28,7 @@ NOAA_vars <- c('air_temperature',
                'northward_wind')
 
 NOAA_summary <- model_meta |> 
-  select(model_id) 
+  select(model_id, variable) 
 
 
 for (i in 1:length(NOAA_vars)) {
@@ -37,17 +38,18 @@ for (i in 1:length(NOAA_vars)) {
     NOAA_summary |> 
     mutate(detect_var = str_detect(model_meta$NOAA_var, detect_var)) 
   
-  colnames(NOAA_summary)[1 + i] <- detect_var
+  colnames(NOAA_summary)[2 + i] <- detect_var
 }
 
 # Number of models that contain each variable
 NOAA_summary |> 
-  select(-model_id) |> 
+  select(-model_id) |>
+  group_by(variable) |> 
   summarise_all(~sum(.x, na.rm = T))
 
 NOAA_summary |> 
   mutate(vars_n = rowSums(pick(where(is.logical)))) |> 
-  group_by(vars_n) |> 
+  group_by(variable, vars_n) |> 
   summarise(n = n())
 
 # Aspects of DA
@@ -62,6 +64,10 @@ model_meta |>
 # is the forecast 'dynamic'?
 model_meta |> 
   summarise(dynamic = sum(dynamic, na.rm = T))
+
+# looking at drivers by variable:
+model_meta |> 
+  mutate(n_noaa = length(str_split_1(string = NOAA_var, pattern = ',')))
 
 # summary of submissions --------------------
 scores <- arrow::open_dataset('scores')
