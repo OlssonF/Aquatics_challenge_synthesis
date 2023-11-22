@@ -1,7 +1,9 @@
 
 get_forecast  <- function(theme, 
                           model_id, 
-                          forecast_date) {
+                          forecast_date, 
+                          var, 
+                          h = 30) {
   s3_model <- s3_bucket(file.path('neon4cast-forecasts/parquet', theme, 
                                   paste0('model_id=', model_id), 
                                   paste0('reference_datetime=', forecast_date)),
@@ -38,7 +40,7 @@ get_forecast  <- function(theme,
         
         group_by(site_id, datetime, model_id) |> 
         # sample from the distribution based on the mean and sd
-        summarise(prediction = rnorm(100, mean = mu, sd = sigma)) |> 
+        reframe(prediction = rnorm(100, mean = mu, sd = sigma)) |> 
         group_by(site_id, datetime) |> 
         # parameter value needs to be character
         mutate(parameter = as.character(row_number()),
