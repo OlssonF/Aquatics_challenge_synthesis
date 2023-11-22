@@ -10,6 +10,7 @@ library(tidyverse)
 library(arrow)
 library(lubridate)
 library(tidytext)
+library(ggpattern)
 ```
 
 ## Read in the data and model metadata
@@ -65,84 +66,96 @@ temperature_skill <- temperature_scores |>
 
 ## Figure 1
 
-Model type impacts of water temperature forecast skill (relative to climatology). Individual model mean CRPS skill, coloured by model_type (as defined by submitters). 
-Overall and then by site. 
+Top 10 models and all models coloured by type and showing if they include covariates or not. 
 ```{r model-type, fig.width=10}
-top5_temp_site <- temperature_skill |> 
-  group_by(model_id, site_id) |> 
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  group_by(site_id) |> 
-  slice_max(mean_crps, n= 5, na_rm = T) |> 
-  mutate(model_id = fct_reorder(model_id, desc(mean_crps))) |>
-  left_join(model_meta) |> 
-  ggplot(aes(x=mean_crps, 
-             y = reorder_within(x = model_id, within = site_id, by = mean_crps),
-             fill = model_type)) +
-  geom_bar(stat = 'identity') +
-  scale_y_reordered() +
-  scale_fill_manual(values = cols_modeltype) +
-  facet_wrap(~site_id, scales = 'free_y',nrow = 4) +
-  labs(y='model_id', x = 'mean CRPS skill (vs climatology)') +
-  geom_vline(xintercept = 0) +
-  theme_bw()
-
-
-top10_temp <- temperature_skill |> 
+top10_temp <- 
+  temperature_skill |> 
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  ungroup() |> 
-  slice_max(mean_crps, n= 10, na_rm = T) |> 
+  ungroup() |>
+  slice_max(mean_crps, n= 10, na_rm = T) |>
   left_join(model_meta) |> 
-  mutate(model_id = fct_reorder(model_id, mean_crps)) |>
-  ggplot(aes(x=mean_crps, 
-             y = model_id,
-             fill = model_type)) +
-  geom_bar(stat = 'identity') +
+  mutate(model_id = fct_reorder(model_id, mean_crps)) |> 
+  ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
+  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+                   stat = "identity",
+                   alpha = 0.8, 
+                   pattern_fill = "black",
+                   colour = "black", 
+                   pattern_spacing = 0.02,
+                   pattern_alpha = 0.5) + 
   scale_y_reordered() +
   labs(y='Model ID', x = 'mean CRPS skill (vs climatology)') +
   geom_vline(xintercept = 0) +
   scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe')) +
+  scale_pattern_type_manual(values=c(NA, NA)) +
   theme_bw()
 
-ggpubr::ggarrange(top10_temp, top5_temp_site, nrow = 1, 
-                  # widths = c(1,0.5), 
+all_temperature <- temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  left_join(model_meta) |> 
+  mutate(model_id = fct_reorder(model_id, mean_crps)) |> 
+  ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
+  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+                   stat = "identity",
+                   alpha = 0.8, 
+                   pattern_fill = "black",
+                   colour = "black", 
+                   pattern_spacing = 0.02,
+                   pattern_alpha = 0.8) + 
+  scale_y_reordered() +
+  labs(y='Model ID', x = 'mean CRPS skill (vs climatology)') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe')) +
+  scale_pattern_type_manual(values=c(NA, NA)) +
+  theme_bw()
+
+ggpubr::ggarrange(top10_temp, all_temperature, nrow = 1, 
                   common.legend = T,
-                  legend = 'top')
+                  legend = 'top', labels = 'auto')
 
 ```
  
+9 of 10 top 10 models use covariates, and process models and ML are the most common best performers. 
+There are a lot of really bad empirical models.
 ## Figure 2
-How does model type performance, on avergae, differ by site. Either comparing sites by model type or vise versa. 
+How does model type performance, on avergae, differ by site. 
+
 This uses all model_ids (maybe get rid of the 'worst') performers. 
 
 ```{r model_type-site}
-ggpubr::ggarrange(temperature_scores |> 
-  left_join(model_meta, by = 'model_id') |> 
+temperature_skill |> 
+  left_join(model_meta, by = 'model_id') |>
+  filter(model_type != 'null') |> 
   group_by(model_type, model_id, site_id) |> 
-  summarise(mean_crps = mean(crps, na.rm = T)) |>  
-  ggplot(aes(x = mean_crps, 
-             y = site_id)) +
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |>  
+  ggplot(aes(x = mean_skill, 
+             y = site_id, 
+             colour = model_type)) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
   geom_boxplot() +
   facet_wrap(~model_type, scales = 'free_y',nrow = 4) +
   labs(y='model_id', x = 'mean CRPS score') +
-  theme_bw(),
-  
-  temperature_scores |> 
-  left_join(model_meta, by = 'model_id') |> 
-  group_by(model_type, model_id, site_id) |> 
-  summarise(mean_crps = mean(crps, na.rm = T)) |>  
-  ggplot(aes(x = mean_crps, 
-             y = model_type)) +
-  geom_boxplot() +
-  facet_wrap(~site_id, scales = 'free_y',nrow = 4) +
-  labs(y='model_id', x = 'mean CRPS score') +
-  theme_bw(),
-  nrow = 1, widths = c(1, 1.5))
+  scale_colour_manual(values = cols_modeltype) +
+  theme_bw() 
 
+temperature_climatology |> 
+  group_by(site_id) |> 
+  summarise(mean_score = mean(crps_climatology, na.rm = T))  |> 
+  arrange(mean_score)
 ```
 
+Gains at PRLA and PRPO relative to climatology (these have the worst climatology - see table), especially using process-models and ML.
+
+The best climatology sites (BARC, SUGG) are difficult to beat even though perform well overall. 
+
 ## Figure 3
-How does the performance vary across horizon? This is the top 10 models at each site (so this doesn't really look at model type...)
+How does the performance vary across horizon? 
+Do the models perform better consistently across the horizon at each site?
+How do the best performing individual models perform?
 
 ```{r horizon-score}
 # top 10 average models
@@ -153,7 +166,7 @@ top_mods <- temperature_skill |>
   slice_max(mean_crps, n = 10, na_rm = T) |> 
   distinct(model_id)
 
-temperature_skill |> 
+A <- temperature_skill |> 
   filter(model_id %in% top_mods$model_id) |> 
   group_by(site_id, horizon) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
@@ -162,15 +175,10 @@ temperature_skill |>
   geom_hline(yintercept = 0) + 
   geom_line()  +  
   labs(y='mean CRPS skill (vs climatology)', x = 'horizon (days)') +
+  scale_color_viridis_d(option = 'H') +
   theme_bw()
 
-```
-
-So maybe something more like this...
-This is all sites together, so more like figure 1.
-
-```{r NOAA-scores}
-temperature_skill |> 
+B <- temperature_skill |> 
   filter(model_id %in% top_mods$model_id) |> 
   group_by(model_id, horizon) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
@@ -179,53 +187,21 @@ temperature_skill |>
   geom_hline(yintercept = 0) + 
   geom_line()  +  
   labs(y='mean CRPS skill (vs climatology)', x = 'horizon (days)') +
+  scale_color_viridis_d(option = 'A',) +
   theme_bw()
+
+ggpubr::ggarrange(A, B, labels = 'auto', align = 'v', nrow = 2)
 ```
+Models beeating climatology at the shorter horizons (as expected) PRLA and PRPO always better than climatology.
 
-## Figure 4 - inclusion of covariates
+Individual model performance decreases relative to climatology mostly except for random forest and lasso regression which improve after short horizons (may be related to the precision rather than accuracy). Less degradation in performance of ML models across the horizon (xgboost and random forest) than process models. 
 
-```{r}
-
-temperature_skill |> 
-  group_by(model_id) |> 
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  ungroup() |> 
-  slice_max(mean_crps, n= 10, na_rm = T) |> 
-  left_join(model_meta) |> 
-  mutate(model_id = fct_reorder(model_id, mean_crps)) |>
-  ggplot(aes(x=mean_crps, 
-             y = model_id,
-             fill = as.factor(uses_NOAA))) +
-  geom_bar(stat = 'identity') +
-  scale_y_reordered() +
-  labs(y='Model ID', x = 'mean CRPS skill (vs climatology)') +
-  geom_vline(xintercept = 0) +
-  scale_fill_viridis_d(option = 'inferno') +
-  theme_bw()
-
-temperature_skill |> 
-  group_by(model_id, site_id) |> 
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  group_by(site_id) |> 
-  slice_max(mean_crps, n= 5, na_rm = T) |> 
-  mutate(model_id = fct_reorder(model_id, desc(mean_crps))) |>
-  left_join(model_meta) |> 
-  ggplot(aes(x=mean_crps, 
-             y = reorder_within(x = model_id, within = site_id, by = mean_crps),
-             fill = as.factor(uses_NOAA))) +
-  geom_bar(stat = 'identity') +
-  scale_y_reordered() +
-  scale_fill_viridis_d(option = 'inferno') +
-  facet_wrap(~site_id, scales = 'free_y',nrow = 4) +
-  labs(y='model_id', x = 'mean CRPS skill (vs climatology)') +
-  geom_vline(xintercept = 0) +
-  theme_bw()
-```
-
-
-## Figure 5 - NOAA scores
+## Figure 4 - NOAA scores
 
 can this be related to the weather forecasts?
+
+There is only one month when the observations overlap for the observational data...
+But still the performance is better vs the observations than the stage 3
 
 ```{r}
 NOAA_scores <- arrow::open_dataset("../scores") |>
@@ -235,6 +211,12 @@ NOAA_scores <- arrow::open_dataset("../scores") |>
 
 NOAA_scores |> 
   mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |> 
+  select(site_id, crps, horizon, reference_datetime, model_id) |> 
+  pivot_wider(names_from = site_id, values_from = crps, id_cols = horizon:model_id) |> 
+  filter(reference_datetime > as_date('2023-05-25'),
+         reference_datetime < as_date('2023-07-31')) |> 
+  # only a 1 month overlap....
+  pivot_longer(cols = BARC:TOOK, names_to = 'site_id', values_to = 'crps') |> 
   group_by(model_id, site_id, horizon) |> 
   summarise(mean_crps = mean(crps, na.rm = T)) |> 
   filter(horizon <= 30) |> 
@@ -257,22 +239,45 @@ temperature_scores |>
   summarise(cv = sd(observation, na.rm = T)/ mean(observation, na.rm = T)) |> 
   ggplot(aes(x=horizon, y= cv, colour = site_id)) +
   geom_point() +
-  scale_colour_viridis_d(option = 'turbo', begin = 0.1, end = 0.9) +
+  scale_colour_viridis_d(option = 'turbo') +
   theme_bw()
 ```
 
 
-Model rankings
-```{r eval = F}
-temperature_scores |> 
-  mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |> 
-  filter(horizon < 30, horizon > 0) |> 
-  select(reference_datetime, horizon, model_id, site_id, crps) |>
-  arrange(reference_datetime, horizon, site_id, crps) |>
-  group_by(reference_datetime, horizon, site_id) |>
-  mutate(rank = row_number()) |>
-  group_by(horizon, site_id, rank, model_id) |>
-  summarise(proportion = (n()/length(unique(temperature_scores$reference_datetime)))) 
+# Supplementary figures
 
+```{r echo = F}
+temperature_skill |> 
+  left_join(model_meta, by = 'model_id') |>
+  filter(model_type != 'null') |> 
+  group_by(model_type, model_id, site_id) |> 
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |>  
+  ggplot(aes(x = mean_skill, 
+             y = site_id, 
+             colour = model_type)) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  geom_boxplot() +
+  facet_wrap(~model_type, scales = 'free_y',nrow = 4) +
+  labs(y='model_id', x = 'mean CRPS score', title = 'all dates') +
+  scale_colour_manual(values = cols_modeltype) +
+  theme_bw() 
+
+temperature_skill |> 
+  left_join(model_meta, by = 'model_id') |>
+  filter(model_type != 'null',
+         reference_datetime > as_date('2023-06-28'),
+         reference_datetime < as_date('2023-09-18')) |> 
+  group_by(model_type, model_id, site_id) |> 
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |>  
+  ggplot(aes(x = mean_skill, 
+             y = site_id, 
+             colour = model_type)) +
+  geom_vline(xintercept = 0, linetype = 'dashed') +
+  geom_boxplot() +
+  facet_wrap(~model_type, scales = 'free_y',nrow = 4) +
+  labs(y='model_id', x = 'mean CRPS score', title = 'overlapping only') +
+  scale_colour_manual(values = cols_modeltype) +
+  theme_bw() 
 ```
+
 
