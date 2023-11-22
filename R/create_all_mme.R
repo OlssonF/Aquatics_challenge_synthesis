@@ -14,10 +14,9 @@ create_all_mme <- function(forecast_models = 'all', # vector of list of model na
   
   mods <- data.frame(model_id = s3_theme$ls(),
                      present = NA) |> 
-    filter(!model_id %in% omit)
+    filter(!model_id %in% paste0('model_id=', omit))
   
-  message('Checking which models exist for this forecast date')
-  
+  message(paste0('---- Checking which models exist for ', forecast_date,'  -----'))
   for (i in 1:nrow(mods)) {
     
     s3_model <- s3_bucket(paste0('neon4cast-forecasts/parquet/', theme, '/',
@@ -38,7 +37,7 @@ create_all_mme <- function(forecast_models = 'all', # vector of list of model na
   # function will generate an ensemble if it's a normal distribution
   forecasts <- map_dfr(
     .x = gsub(mods_present$model_id, pattern=  'model_id=', replacement = ''), 
-    .f = ~ get_forecast(model_id = .x, theme = theme, forecast_date = forecast_date))
+    .f = ~ get_forecast(model_id = .x, theme = theme, forecast_date = forecast_date, var = var, h = h))
   
   # How many from each forecast should be sampled
   n_models <- distinct(forecasts, model_id, site_id) |> 
@@ -97,7 +96,9 @@ create_all_mme <- function(forecast_models = 'all', # vector of list of model na
       file.remove(file.path('./Forecasts/ensembles', filename))
       message('forecast not valid')
     } else {
+      message('forecast saved')
       return(filename)
+      
     }
   }
   
@@ -106,7 +107,11 @@ create_all_mme <- function(forecast_models = 'all', # vector of list of model na
       select(-any_of(c('pubDate'))) |> 
       mutate(date = as_date(datetime)) |> 
       group_by(model_id, reference_datetime, date) |> 
-      arrow::write_parquet(out_dir)
+      arrow::write_dataset(path = out_dir, format = 'parquet')
+    message('forecast saved')
+    return(T)
+    
+    
   }
   
   
