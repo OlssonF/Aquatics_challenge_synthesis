@@ -20,7 +20,7 @@ get_forecast  <- function(theme,
     mutate(model_id = model_id,
            horizon = as_date(datetime) - as_date(forecast_date)) |> 
     filter(horizon <= h) |> 
-    select(-horizon)
+    select(-any_of(c('horizon', 'pubDate')))
   
   if (nrow(forecast) == 0) {
     message('No forecast for ', var, ' using ', model_id)
