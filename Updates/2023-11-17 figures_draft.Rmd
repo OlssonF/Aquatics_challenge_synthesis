@@ -75,7 +75,8 @@ top10_temp <-
   ungroup() |>
   slice_max(mean_crps, n= 10, na_rm = T) |>
   left_join(model_meta) |> 
-  mutate(model_id = fct_reorder(model_id, mean_crps)) |> 
+  mutate(model_id = fct_reorder(model_id, mean_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
   ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
   geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
                    stat = "identity",
@@ -90,15 +91,17 @@ top10_temp <-
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
   scale_pattern_type_manual(values=c(NA, NA)) +
-  theme_bw()  + 
-    guides(pattern = guide_legend(override.aes = list(fill = "white")),
-           fill = guide_legend(override.aes = list(pattern = "none")))
+  theme_bw() + 
+    guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
+                                  title = 'Uses weather covariates?'),
+           fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
 
 all_temp <- temperature_skill |> 
     group_by(model_id) |> 
     summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
     left_join(model_meta) |> 
-    mutate(model_id = fct_reorder(model_id, mean_crps)) |> 
+    mutate(model_id = fct_reorder(model_id, mean_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
     ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
     geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
                      stat = "identity",
@@ -114,8 +117,8 @@ all_temp <- temperature_skill |>
     scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses weather covariates?') +
     scale_pattern_type_manual(values=c(NA, NA), name = 'Uses weather covariates?') +
     theme_bw() + 
-    guides(pattern = guide_legend(override.aes = list(fill = "white")),
-           fill = guide_legend(override.aes = list(pattern = "none")))
+    guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses weather covariates?'),
+           fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
 
 ggpubr::ggarrange(top10_temp, all_temp, nrow = 1, 
                   common.legend = T,
@@ -125,6 +128,7 @@ ggpubr::ggarrange(top10_temp, all_temp, nrow = 1,
  
 9 of 10 top 10 models use covariates, and process models and ML are the most common best performers. 
 There are a lot of really bad empirical models.
+
 ## Figure 2
 How does model type performance, on avergae, differ by site. 
 
@@ -191,14 +195,61 @@ B <- temperature_skill |>
   geom_hline(yintercept = 0) + 
   geom_line()  +  
   labs(y='mean CRPS skill (vs climatology)', x = 'horizon (days)') +
-  scale_color_viridis_d(option = 'A',) +
+  scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9) +
   theme_bw()
 
 ggpubr::ggarrange(A, B, labels = 'auto', align = 'v', nrow = 2)
 ```
+
 Models beeating climatology at the shorter horizons (as expected) PRLA and PRPO always better than climatology.
 
 Individual model performance decreases relative to climatology mostly except for random forest and lasso regression which improve after short horizons (may be related to the precision rather than accuracy). Less degradation in performance of ML models across the horizon (xgboost and random forest) than process models. 
+
+### How much is uncertainty?
+
+How does the sd vary - is this my some see a increase in crps skill? 
+
+```{r horizon-score}
+# top 10 average models
+top_mods <- temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  ungroup() |> 
+  slice_max(mean_crps, n = 10, na_rm = T) |> 
+  distinct(model_id)
+
+sd <- temperature_scores |> 
+  mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |> 
+  filter(model_id %in% top_mods$model_id, 
+         horizon > 0, 
+         horizon <=30) |>
+  group_by(model_id, horizon) |> 
+  summarise(mean_sd = mean(sd, na.rm = T)) |> 
+  ggplot(aes(x=horizon, 
+             y = mean_sd, colour = model_id)) +
+  geom_line()  +  
+  labs(y='mean standard deviation', x = 'horizon (days)') +
+  scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9) +
+  theme_bw()
+
+bias <- temperature_scores |> 
+  mutate(horizon = as_date(datetime) - as_date(reference_datetime),
+         abs_bias = abs(mean - observation)) |> 
+  filter(model_id %in% top_mods$model_id, 
+         horizon > 0, 
+         horizon <=30) |>
+  group_by(model_id, horizon) |> 
+  summarise(mean_abs_bias = mean(abs_bias, na.rm = T)) |> 
+  ggplot(aes(x=horizon, 
+             y = mean_abs_bias, colour = model_id)) +
+  geom_line()  +  
+  labs(y='mean absolute bias (oC)', x = 'horizon (days)') +
+  scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9) +
+  theme_bw() +
+  coord_cartesian(ylim = c(0, 2.5))
+
+ggpubr::ggarrange(sd, bias, labels = 'auto', align = 'v', nrow = 2)
+```
 
 ## Figure 4 - NOAA scores
 
