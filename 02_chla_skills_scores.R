@@ -15,7 +15,6 @@ googlesheets4::gs4_deauth()
 model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing")
 
 # Open dataset-------------
-# calculate chla skill scores
 chla_scores <- arrow::open_dataset("scores") |>
   filter(site_id %in% lake_sites,
          # model_id != 'climatology',
@@ -31,7 +30,6 @@ chla_persistence <- arrow::open_dataset("scores") |>
   collect() |> 
   select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
   arrange(reference_datetime, datetime, site_id) |> 
-  mutate(bias = observation - mean) |> 
   pivot_wider(values_from = c(crps, logs),
               names_from = model_id)
 
@@ -68,18 +66,58 @@ chla_skill |>
   scale_fill_manual(values = cols_modeltype) +
   theme_bw() 
 
-chla_skill |> 
-  group_by(model_id, site_id) |> 
+top10_chla <- 
+  chla_skill |> 
+  group_by(model_id) |> 
   summarise(median_crps = median(skill_crps, na.rm = T)) |> 
-  group_by(site_id) |> 
-  slice_max(median_crps, n= 5, na_rm = T) |> 
-  mutate(model_id = fct_reorder(model_id, desc(median_crps))) |>
+  ungroup() |>
+  slice_max(median_crps, n= 10, na_rm = T) |>
   left_join(model_meta) |> 
-  ggplot(aes(x=median_crps, 
-             y = reorder_within(x = model_id, within = site_id, by = median_crps),
-             fill = model_type)) +
-  geom_bar(stat = 'identity') +
+  mutate(model_id = fct_reorder(model_id, median_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
+  ggplot(aes(x=median_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
+  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+                   stat = "identity",
+                   alpha = 0.8, 
+                   pattern_fill = "black",
+                   colour = "black", 
+                   pattern_spacing = 0.04,
+                   pattern_alpha = 1) + 
   scale_y_reordered() +
-  facet_wrap(~site_id, scales = 'free') +
-  labs(y='model_id', x = 'median CRPS skill (vs climatology)') +
-  geom_vline(xintercept = 0)
+  labs(y='Model ID', x = 'median CRPS skill (vs climatology)') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe')) +
+  scale_pattern_type_manual(values=c(NA, NA)) +
+  theme_bw() + 
+  guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
+                                title = 'Uses weather covariates?'),
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
+
+all_chla <- chla_skill |> 
+  group_by(model_id) |> 
+  summarise(median_crps = median(skill_crps, na.rm = T)) |> 
+  left_join(model_meta) |> 
+  mutate(model_id = fct_reorder(model_id, median_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
+  ggplot(aes(x=median_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
+  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+                   stat = "identity",
+                   alpha = 0.8, 
+                   pattern_fill = "black",
+                   colour = "black", 
+                   pattern_spacing = 0.03,
+                   pattern_alpha = 1) + 
+  scale_y_reordered() +
+  labs(y='Model ID', x = 'median CRPS skill (vs climatology)') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses weather covariates?') +
+  scale_pattern_type_manual(values=c(NA, NA), name = 'Uses weather covariates?') +
+  theme_bw() + 
+  guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses weather covariates?'),
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
+
+ggpubr::ggarrange(top10_chla, all_chla, nrow = 1, 
+                  common.legend = T,
+                  legend = 'top', labels = 'auto')
