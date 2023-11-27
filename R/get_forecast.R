@@ -9,47 +9,54 @@ get_forecast  <- function(theme,
                                   paste0('reference_datetime=', forecast_date)),
                         endpoint_override= "data.ecoforecast.org")
   
-  forecast <- arrow::open_dataset(s3_model) |>
-    collect() |> 
-    filter(variable == var, 
-           datetime > forecast_date) |>
-    group_by(site_id) |> 
-    # remove sites that contain NAs
-    filter(!any(is.na(prediction))) |> 
-    ungroup() |> 
-    mutate(model_id = model_id,
-           horizon = as_date(datetime) - as_date(forecast_date)) |> 
-    filter(horizon <= h) |> 
-    select(-any_of(c('horizon', 'pubDate')))
+  forecast <- try(arrow::open_dataset(s3_model) |>
+    collect(), silent = T) 
   
-  if (nrow(forecast) == 0) {
-    message('No forecast for ', var, ' using ', model_id)
-    return(forecast)
+  if (class(forecast)[1] == 'try-error') {
+    message(paste0('error in retrieving forecast for ', model_id ))
+    return(NULL)
   } else {
-    # do some more data wrangling
-    message(model_id, ' read in')
+    forecast <-  forecast |> 
+      filter(variable == var, 
+             datetime > forecast_date) |>
+      group_by(site_id) |> 
+      # remove sites that contain NAs
+      filter(!any(is.na(prediction))) |> 
+      ungroup() |> 
+      mutate(model_id = model_id,
+             horizon = as_date(datetime) - as_date(forecast_date)) |> 
+      filter(horizon <= h) |> 
+      select(-any_of(c('horizon', 'pubDate')))
     
-    if (forecast$family[1] != 'sample') {
-      message('generate ensemble of 100')
+    if (nrow(forecast) == 0) {
+      message('No forecast for ', var, ' using ', model_id)
+      return(forecast)
+    } else {
+      # do some more data wrangling
+      message(model_id, ' read in')
       
-      forecast <- forecast |> 
-        select(datetime, site_id, variable, family, parameter, prediction, model_id) |> 
-        pivot_wider(names_from = parameter,
-                    values_from = prediction, 
-                    id_cols = c(datetime, site_id, model_id)) |> 
+      if (forecast$family[1] != 'sample') {
+        message('generate ensemble of 100')
         
-        group_by(site_id, datetime, model_id) |> 
-        # sample from the distribution based on the mean and sd
-        reframe(prediction = rnorm(100, mean = mu, sd = sigma)) |> 
-        group_by(site_id, datetime) |> 
-        # parameter value needs to be character
-        mutate(parameter = as.character(row_number()),
-               # model_id = ensemble_name, 
-               reference_datetime = forecast_date,
-               variable = var,
-               family = 'ensemble')
-    }
-  }     
-  return(forecast)
+        forecast <- forecast |> 
+          select(datetime, site_id, variable, family, parameter, prediction, model_id) |> 
+          pivot_wider(names_from = parameter,
+                      values_from = prediction, 
+                      id_cols = c(datetime, site_id, model_id)) |> 
+          
+          group_by(site_id, datetime, model_id) |> 
+          # sample from the distribution based on the mean and sd
+          reframe(prediction = rnorm(100, mean = mu, sd = sigma)) |> 
+          group_by(site_id, datetime) |> 
+          # parameter value needs to be character
+          mutate(parameter = as.character(row_number()),
+                 # model_id = ensemble_name, 
+                 reference_datetime = forecast_date,
+                 variable = var,
+                 family = 'ensemble')
+      }
+    }     
+    return(forecast)
+  }
 
 }
