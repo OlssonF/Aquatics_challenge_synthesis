@@ -73,7 +73,7 @@ if (!dir.exists(score_path)) {
 
 #### Read in forecasts ####
 # Open the dataset of forecast parquets to be scored
-forecast_parquets <- './Forecasts/parquet'
+forecast_parquets <- './Forecasts/parquet/model_id=all_submissions'
 open_parquets <- arrow::open_dataset(forecast_parquets)
 
 
@@ -81,22 +81,21 @@ open_parquets <- arrow::open_dataset(forecast_parquets)
 models <- 'all_submissions'
 
 # vector of unique reference_datetimes
-unique_reftime <- open_parquets |>
-  distinct(reference_datetime) |>
+unique_date <- open_parquets |>
+  distinct(date) |>
   collect() |>
-  arrange(reference_datetime) |>
-  pull(reference_datetime)
+  arrange(date) |>
+  pull(date)
 
 # get all combinations of model and reference_datetime
-to_score <- expand.grid(model_id = models, reference_datetime = unique_reftime)
+to_score <- expand.grid(model_id = models, date = unique_date)
 
 
 #### Regular scoring function ####
 for (i in 1:nrow(to_score)) {
   # subset the model and reference datetime
   forecast_df <- open_parquets|>
-    dplyr::filter(model_id == to_score$model_id[i],
-                  reference_datetime == to_score$reference_datetime[i]) |>
+    dplyr::filter(date == to_score$date[i]) |>
     collect()
 
   if (nrow(forecast_df) != 0) {
