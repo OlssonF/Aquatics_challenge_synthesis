@@ -92,6 +92,14 @@ unique_date <- open_parquets |>
 to_score <- expand.grid(model_id = models, date = unique_date)
 
 
+# already scored?
+latest <- open_dataset(file.path(score_path, 'model_id=all_submissions')) |> 
+  summarise(latest = max(date)) |> # which is the most recent datetime
+  pull()
+
+to_score <- to_score |> 
+  filter(as_datetime(date) >= latest)
+
 #### Regular scoring function ####
 for (i in 1:nrow(to_score)) {
   # subset the model and reference datetime
@@ -105,11 +113,11 @@ for (i in 1:nrow(to_score)) {
     generate_forecast_score_arrow(targets_file = 'https://data.ecoforecast.org/neon4cast-targets/aquatics/aquatics-targets.csv.gz',
                                   forecast_df = forecast_df,
                                   local_directory = score_path)
-    message(i, "/", nrow(to_score), " forecasts scored")
+    message(i, "/", nrow(to_score), " dates scored")
 
 
   } else {
-    message('no forecast for ', to_score$model_id[i], ' ', to_score$reference_datetime[i] )
+    message('no forecasts for ', to_score$model_id[i], ' ', to_score$reference_datetime[i] )
   }
 
 }
