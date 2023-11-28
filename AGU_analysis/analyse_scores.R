@@ -48,44 +48,53 @@ example_plot <- all_ensemble_scores |>
   geom_point(aes(x=datetime, y=observation, shape = 'Observation')) +
   # geom_ribbon(aes(x=datetime, ymax=quantile97.5, ymin=quantile02.5, fill = model_id), alpha = 0.2)+
   geom_line(aes(x=datetime, y= mean, colour = model_id)) +
-  facet_manual(vars(site_id), design = design, labeller = label_both) +
+  facet_manual(vars(site_id), scales = 'free_y', design = design, labeller = label_both) +
   scale_shape_manual(values = 16, name = '') +
   scale_x_datetime(breaks = '10 days', date_labels = '%d %b') +
   theme_bw(base_size = 14)  +
-  labs(x = 'Date', y='Temperature (°C)', colour = 'Model', title = 'Forecasts generated on: July 1, 2023') 
+  labs(x = 'Date', y='Temperature (°C)', colour = 'Model', title = 'Forecasts generated on:\nJuly 1, 2023') 
 
 ggsave(example_plot, filename = './AGU_analysis/example_forecast.png', height = 19, width = 19, units = 'cm')
 
 #----- rankings ------
-n_forecasts_site <- all_ensemble_scores |> na.omit() |> 
-  distinct(reference_datetime, site_id) |> 
-  group_by(site_id) |> 
+n_forecasts <- all_ensemble_scores %>%
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |>
+  filter(horizon %in% c(1:30),
+         !is.na(crps)) |>
+  group_by(horizon, model_id, site_id) |> 
   summarise(n=n())
 
-n_forecasts <- length(unique(all_ensemble_scores$reference_datetime))
 
 ranks <- all_ensemble_scores %>%
-  mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |>
-  filter(horizon %in% c(1:30)) |>
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |>
+  filter(horizon %in% c(1:30),
+         !is.na(crps)) |>
   
   select(reference_datetime, horizon, site_id, model_id, crps) |>
   arrange(reference_datetime, horizon, site_id, crps) |>
   group_by(reference_datetime, horizon, site_id) |>
-  mutate(rank = row_number()) |>
+  mutate(rank = row_number()) |> 
   
-  group_by(horizon, site_id, rank, model_id) |>
-  summarise(proportion = (n()/n_forecasts)) |>
-  ungroup() |>
-  
-    # make sure every rank is present in each model/site_id/horizon group
-  complete(rank, nesting(model_id, site_id, horizon), fill = list(proportion = 0))  
+  group_by(horizon, site_id, model_id, rank) |> 
+  summarise(n_rank = n()) |> 
+  full_join(n_forecasts) |> 
+  mutate(proportion = n_rank/n) 
+
+
+# if all models were submitted at all times and sites
+all_vals <- expand.grid(rank = seq(1,38),
+                        site_id = unique(ranks$site_id),
+                        model_id = unique(ranks$model_id), 
+                        horizon = unique(ranks$horizon))
 
 ranks |> 
-  filter(model_id %in% c('flareGLM', 'fARIMA', 'tg_randfor', 'all_submissions', 'xgboost_parallel', 'tg_lasso')) |> 
+  full_join(all_vals) |> 
+  mutate(proportion = ifelse(is.na(proportion), 0, proportion)) |> 
+  filter(model_id %in% c('flareGLM', 'cb_prophet', 'fARIMA', 'tg_randfor', 'all_submissions', 'xgboost_parallel', 'tg_lasso')) |> 
   mutate(group_rank = cut(rank,
                           breaks = ceiling(seq(0, 38, length.out = 11)),
                           labels = seq(1,10, length.out = 10))) |> 
-  group_by(group_rank, model_id, site_id, horizon) |> 
+  group_by(group_rank, site_id, model_id, horizon) |> 
   summarise(proportion = sum(proportion)) |> 
   ggplot() +
   geom_area(aes(x=horizon, y=proportion, fill=fct_rev(as.factor(group_rank))),
@@ -98,48 +107,75 @@ ranks |>
         panel.spacing.y = unit(1.1, 'lines')) +
   coord_cartesian(ylim = c(0,1), xlim = c(1,30)) +
   scale_y_continuous(expand = c(0,-0.10), name = 'Proportion of forecasts') +
-  scale_x_continuous(expand = c(0,0), breaks = c(1,7,14), name = 'Horizon (days)')
+  scale_x_continuous(expand = c(0,0), name = 'Horizon (days)')
+
+#---------------------------------#
+
+# rankings aggregated
+n_forecasts <- all_ensemble_scores %>%
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |>
+  filter(horizon %in% c(1:30),
+         !is.na(crps)) |>
+  group_by(horizon, model_id, site_id) |> 
+  summarise(n=n()) |> 
+  group_by(model_id) |> 
+  summarise(n = sum(n))
 
 
-#-------------------------------------------------#
-# ---- summarise across site -------
-
-
-all_ensemble_scores %>%
-  mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |>
-  filter(horizon %in% c(1:30)) |>
-  # mean skill per forecast
-  group_by(reference_datetime, site_id, model_id) |> 
-  summarise(crps = mean(crps, na.rm = T)) |> 
+ranks <- all_ensemble_scores %>%
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |>
+  filter(horizon %in% c(1:30),
+         !is.na(crps)) |>
   
+  select(reference_datetime, horizon, site_id, model_id, crps) |>
+  arrange(reference_datetime, horizon, site_id, crps) |>
+  group_by(reference_datetime, horizon, site_id) |>
+  mutate(rank = row_number()) |> 
+  
+  group_by(horizon, site_id, model_id, rank) |> 
+  summarise(n_rank = n()) |>
+  group_by(model_id, rank) |> 
+  summarise(n_rank = sum(n_rank)) |> 
+  full_join(n_forecasts) |> 
+  mutate(proportion = n_rank/n) 
 
-  select(reference_datetime, site_id, model_id, crps) |>
-  arrange(reference_datetime, site_id, crps) |>
-  group_by(reference_datetime, site_id) |>
-  mutate(rank = row_number()) |>
-  group_by(site_id, rank, model_id) |>
-  summarise(proportion = (n()/n_forecasts)) |>
-  ungroup() |>
-  # make sure every rank is present in each model/site_id/horizon group
-  complete(rank, nesting(model_id, site_id), fill = list(proportion = 0)) |> 
-  filter(model_id %in% c('flareGLM', 'fARIMA', 'tg_randfor', 'all_submissions', 'xgboost_parallel', 'tg_lasso')) |> 
+
+# if all models were submitted at all times and sites
+all_vals <- expand.grid(rank = seq(1,31),
+                        model_id = unique(ranks$model_id))
+
+
+design <- "
+  A##
+  BCD
+  EFG
+"
+
+
+ranks |> 
+  full_join(all_vals) |> 
+  mutate(proportion = ifelse(is.na(proportion), 0, proportion)) |> 
+  filter(model_id %in% c('all_submissions', 'cb_prophet', 'GLEON_physics', 'flareGLM', 
+                         'fARIMA','tg_randfor', 'xgboost_parallel')) |> 
   mutate(group_rank = cut(rank,
-                          breaks = ceiling(seq(0, 38, length.out = 11)),
+                          breaks = ceiling(seq(0, 31, length.out =11)),
                           labels = seq(1,10, length.out = 10))) |> 
-  group_by(group_rank, model_id, site_id) |> 
+  group_by(group_rank, model_id) |> 
   summarise(proportion = sum(proportion)) |> 
+  na.omit() |> 
   ggplot() +
-  geom_area(aes(y=group_rank, x=proportion, fill=fct_rev(as.factor(group_rank))),
-            colour="black", stat = 'identity', position = 'stack') +
-  facet_grid2(site_id~factor(model_id),
-              axes = 'all', remove_labels = 'all') +
+  geom_bar(aes(x=proportion, y=group_rank, fill=fct_rev(as.factor(group_rank))),
+           colour="black", stat = 'identity', position = 'stack') +
+  facet_manual(vars(model_id), design = design) +
+  # facet_manual(vars(site_id), scales = 'free_y', design = design, labeller = label_both) +
+  
   scale_fill_brewer(palette = 'RdBu', name = 'Rank group') +
-  theme_bw() +
+  theme_bw(base_size = 18) +
   theme(panel.spacing.x = unit(1.1, 'lines'),
-        panel.spacing.y = unit(1.1, 'lines')) +
-  coord_cartesian(ylim = c(0,1), xlim = c(1,30)) +
-  scale_y_continuous(expand = c(0,-0.10), name = 'Proportion of forecasts') +
-  scale_x_continuous(expand = c(0,0), breaks = c(1,7,14), name = 'Horizon (days)')
-
+        panel.spacing.y = unit(1.1, 'lines'), 
+        legend.position = 'none', panel.grid.major.y = element_blank()) +
+  scale_x_continuous(name = '% of forecasts', breaks = seq(0, 0.3, 0.1), labels = seq(0, 30, 10)) +
+  scale_y_discrete(breaks = c(1,10), labels = c('best 10 %', 'worst 10 %'), name = '')
+#------------------------------------------
 
 
