@@ -19,10 +19,10 @@ library(ggpattern)
 
 lake_sites <- c('BARC', 'CRAM', 'LIRO', 'PRLA', 'PRPO', 'SUGG', 'TOOK')
 cols_modeltype <- c('empirical' = "#482576FF",
-          'multi-model ensemble' =  "#35608DFF",
-          'process' = "#21908CFF",
-          'ML' = '#BBDF27FF',
-          'null' = '#43BF71FF')
+                    'multi-model ensemble' =  "#35608DFF",
+                    'process' = "#21908CFF",
+                    'ML' = '#BBDF27FF',
+                    'null' = '#43BF71FF')
 # read in the metadata from the google sheet
 googlesheets4::gs4_deauth()
 model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing")
@@ -54,8 +54,8 @@ temperature_skill <- temperature_scores |>
   full_join(temperature_climatology) |> 
   
   # calcaulte the skill relative to climatology (- is bad, + is good)
-  mutate(skill_crps = crps_climatology - crps,
-         skill_logs = logs_climatology - logs,
+  mutate(skill_crps = 1 - (crps/crps_climatology),
+         skill_logs = 1 - (logs/logs_climatology),
          horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
   # consistent forecast period
   filter(horizon <= 30,
@@ -86,46 +86,52 @@ top10_temp <-
                    pattern_spacing = 0.04,
                    pattern_alpha = 1) + 
   scale_y_reordered() +
-  labs(y='Model ID', x = 'mean CRPS skill (vs climatology)') +
+  labs(y='Model', x = 'mean CRPS skill (vs climatology)') +
   geom_vline(xintercept = 0) +
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
   scale_pattern_type_manual(values=c(NA, NA)) +
   theme_bw() + 
-    guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
-                                  title = 'Uses weather covariates?'),
-           fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
+  guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
+                                title = 'Uses weather covariates?'),
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
 
-all_temp <- temperature_skill |> 
-    group_by(model_id) |> 
-    summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-    left_join(model_meta) |> 
-    mutate(model_id = fct_reorder(model_id, mean_crps),
+all_temp <- 
+  temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  left_join(model_meta) |> 
+  mutate(model_id = fct_reorder(model_id, mean_crps),
          uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
-    ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
-    geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
-                     stat = "identity",
-                     alpha = 0.8, 
-                     pattern_fill = "black",
-                     colour = "black", 
-                     pattern_spacing = 0.03,
-                     pattern_alpha = 1) + 
-    scale_y_reordered() +
-    labs(y='Model ID', x = 'mean CRPS skill (vs climatology)') +
-    geom_vline(xintercept = 0) +
-    scale_fill_manual(values = cols_modeltype) +
-    scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses weather covariates?') +
-    scale_pattern_type_manual(values=c(NA, NA), name = 'Uses weather covariates?') +
-    theme_bw() + 
-    guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses weather covariates?'),
-           fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
+  ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
+  # geom_rect(aes(ymin = 'flareGOTM_noDA', 
+  #               ymax ='flareGLM', 
+  #               xmin = -Inf, 
+  #               xmax = Inf)) +
+  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+                   stat = "identity",
+                   alpha = 0.8, 
+                   pattern_fill = "black",
+                   colour = "black", 
+                   pattern_spacing = 0.03,
+                   pattern_alpha = 1) + 
+  scale_y_reordered() +
+  labs(y='Model', x = 'mean CRPS skill (vs climatology)') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses weather covariates?') +
+  scale_pattern_type_manual(values=c(NA, NA), name = 'Uses weather covariates?') +
+  theme_bw() + 
+  guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses weather covariates?'),
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
 
-ggpubr::ggarrange(top10_temp, all_temp, nrow = 1, 
+ggpubr::ggarrange(top10_temp, all_temp, nrow = 1, align = 'hv',
                   common.legend = T,
-                  legend = 'top', labels = 'auto')
+                  legend = 'top', labels = 'auto') |> 
+  ggsave(filename = './Plots/Figure1.png', width = 25, height = 10, units = 'cm')
 
 ```
- 
+
 9 of 10 top 10 models use covariates, and process models and ML are the most common best performers. 
 There are a lot of really bad empirical models.
 
@@ -135,7 +141,20 @@ How does model type performance, on avergae, differ by site.
 This uses all model_ids (maybe get rid of the 'worst') performers. 
 
 ```{r model_type-site}
-temperature_skill |> 
+clim_mean <- temperature_climatology |> 
+  group_by(site_id) |> 
+  summarise(mean_score = mean(crps_climatology, na.rm = T))  |> 
+  arrange(mean_score)
+
+n_model_type <- temperature_skill |> 
+  distinct(model_id) |> 
+  left_join(model_meta) |>
+  group_by(model_type) |> 
+  summarise(n = n())  |> 
+  mutate(site_id = 'TOOK', mean_skill = -3.5) |> 
+  filter(model_type != 'null')
+
+(temperature_skill |> 
   left_join(model_meta, by = 'model_id') |>
   filter(model_type != 'null') |> 
   group_by(model_type, model_id, site_id) |> 
@@ -143,17 +162,16 @@ temperature_skill |>
   ggplot(aes(x = mean_skill, 
              y = site_id, 
              colour = model_type)) +
-  geom_vline(xintercept = 0, linetype = 'dashed') +
+  geom_vline(xintercept = 0, linetype = 'solid') +
+  geom_label(data = n_model_type, aes(label = paste0('n = ', n)))+ 
+  # geom_point(data = clim_mean, aes(x = mean_score, y = site_id), colour = 'black') +
   geom_boxplot() +
   facet_wrap(~model_type, scales = 'free_y',nrow = 4) +
-  labs(y='model_id', x = 'mean CRPS score') +
+  labs(y='Site', x = 'mean CRPS skill (vs climatology)') +
   scale_colour_manual(values = cols_modeltype) +
-  theme_bw() 
+  theme_bw()) |> 
+  ggsave(filename = './Plots/Figure2.png', width = 15, height = 15, units = 'cm')
 
-temperature_climatology |> 
-  group_by(site_id) |> 
-  summarise(mean_score = mean(crps_climatology, na.rm = T))  |> 
-  arrange(mean_score)
 ```
 
 Gains at PRLA and PRPO relative to climatology (these have the worst climatology - see table), especially using process-models and ML.
@@ -182,7 +200,7 @@ A <- temperature_skill |>
              y = mean_crps, colour = site_id)) +
   geom_hline(yintercept = 0) + 
   geom_line()  +  
-  labs(y='mean CRPS skill (vs climatology)', x = 'horizon (days)') +
+  labs(y='mean CRPS skill (vs climatology)', x = 'Horizon (days)') +
   scale_color_viridis_d(option = 'H') +
   theme_bw()
 
@@ -194,11 +212,12 @@ B <- temperature_skill |>
              y = mean_crps, colour = model_id)) +
   geom_hline(yintercept = 0) + 
   geom_line()  +  
-  labs(y='mean CRPS skill (vs climatology)', x = 'horizon (days)') +
-  scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9) +
+  labs(y='mean CRPS skill (vs climatology)', x = 'Horizon (days)') +
+  scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9, name = 'Model') +
   theme_bw()
 
-ggpubr::ggarrange(A, B, labels = 'auto', align = 'v', nrow = 2)
+ggpubr::ggarrange(A, B, labels = 'auto', align = 'v', nrow = 2) |> 
+  ggsave(filename = 'Plots/Figure3.png', width = 15, height = 17, units = 'cm')
 ```
 
 Models beeating climatology at the shorter horizons (as expected) PRLA and PRPO always better than climatology.
@@ -228,7 +247,7 @@ sd <- temperature_scores |>
   ggplot(aes(x=horizon, 
              y = mean_sd, colour = model_id)) +
   geom_line()  +  
-  labs(y='mean standard deviation', x = 'horizon (days)') +
+  labs(y='mean standard deviation', x = 'Horizon (days)') +
   scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9) +
   theme_bw()
 
@@ -243,12 +262,13 @@ bias <- temperature_scores |>
   ggplot(aes(x=horizon, 
              y = mean_abs_bias, colour = model_id)) +
   geom_line()  +  
-  labs(y='mean absolute bias (oC)', x = 'horizon (days)') +
+  labs(y='mean absolute bias', x = 'Horizon (days)') +
   scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9) +
   theme_bw() +
   coord_cartesian(ylim = c(0, 2.5))
 
-ggpubr::ggarrange(sd, bias, labels = 'auto', align = 'v', nrow = 2)
+ggpubr::ggarrange(sd, bias, labels = 'auto', align = 'v', nrow = 2) |> 
+  ggsave(filename = 'Plots/Figure4.png')
 ```
 
 ## Figure 4 - NOAA scores
