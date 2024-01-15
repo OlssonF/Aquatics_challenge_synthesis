@@ -32,7 +32,7 @@ model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
 # start with lake temperatures
 temperature_scores <- arrow::open_dataset("../scores_rescored") |>
   filter(site_id %in% lake_sites,
-         # model_id != 'climatology',
+         horizon != 15,
          model_id %in% model_meta$model_id,
          variable == 'temperature') |>
   collect()
@@ -42,6 +42,7 @@ temperature_scores <- arrow::open_dataset("../scores_rescored") |>
 temperature_climatology <- arrow::open_dataset("../scores_rescored") |>
   filter(model_id == 'climatology', 
          site_id %in% lake_sites,
+         horizon != 15,
          variable == 'temperature') |>
   collect() |> 
   select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
