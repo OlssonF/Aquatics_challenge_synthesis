@@ -11,18 +11,19 @@ library(arrow)
 library(lubridate)
 library(tidytext)
 library(ggpattern)
+library(ggpubr)
 ```
 
 ## Read in the data and model metadata
 
 ```{r read-in-data}
 
-lake_sites <- c('BARC', 'CRAM', 'LIRO', 'PRLA', 'PRPO', 'SUGG', 'TOOK')
+lake_sites <- c('TOOK', 'PRLA','PRPO', 'CRAM', 'LIRO','BARC', 'SUGG')
 cols_modeltype <- c('empirical' = "#482576FF",
                     'multi-model ensemble' =  "#35608DFF",
                     'process' = "#21908CFF",
                     'ML' = '#BBDF27FF',
-                    'null' = '#43BF71FF')
+                    'null' = '#A9A9A9')
 # read in the metadata from the google sheet
 googlesheets4::gs4_deauth()
 model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing")
@@ -54,8 +55,8 @@ temperature_skill <- temperature_scores |>
   full_join(temperature_climatology) |> 
   
   # calcaulte the skill relative to climatology (- is bad, + is good)
-  mutate(skill_crps = 1 - (crps/crps_climatology),
-         skill_logs = 1 - (logs/logs_climatology),
+  mutate(skill_crps = crps_climatology - crps,
+         skill_logs = logs_climatology - logs,
          horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
   # consistent forecast period
   filter(horizon <= 30,
@@ -112,7 +113,7 @@ all_temp <-
                    stat = "identity",
                    alpha = 0.8, 
                    pattern_fill = "black",
-                   colour = "black", 
+                   colour = "black", width = 0.8,
                    pattern_spacing = 0.03,
                    pattern_alpha = 1) + 
   scale_y_reordered() +
@@ -196,6 +197,7 @@ A <- temperature_skill |>
   filter(model_id %in% top_mods$model_id) |> 
   group_by(site_id, horizon) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  mutate(site_id = factor(site_id, levels = lake_sites)) |> 
   ggplot(aes(x=horizon, 
              y = mean_crps, colour = site_id)) +
   geom_hline(yintercept = 0) + 
@@ -204,16 +206,17 @@ A <- temperature_skill |>
   scale_color_viridis_d(option = 'H') +
   theme_bw()
 
-B <- temperature_skill |> 
+B <- 
+  temperature_skill |> 
   filter(model_id %in% top_mods$model_id) |> 
   group_by(model_id, horizon) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   ggplot(aes(x=horizon, 
-             y = mean_crps, colour = model_id)) +
+             y = mean_crps, colour = fct_reorder(model_id, mean_crps, .desc = T))) +
   geom_hline(yintercept = 0) + 
   geom_line()  +  
   labs(y='mean CRPS skill (vs climatology)', x = 'Horizon (days)') +
-  scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9, name = 'Model') +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
   theme_bw()
 
 ggpubr::ggarrange(A, B, labels = 'auto', align = 'v', nrow = 2) |> 
@@ -235,20 +238,23 @@ top_mods <- temperature_skill |>
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   ungroup() |> 
   slice_max(mean_crps, n = 10, na_rm = T) |> 
-  distinct(model_id)
+  mutate(model_id = fct_reorder(model_id, mean_crps, .desc = T)) |> 
+  distinct(model_id) 
 
 sd <- temperature_scores |> 
   mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |> 
   filter(model_id %in% top_mods$model_id, 
          horizon > 0, 
+         horizon != 15,
          horizon <=30) |>
   group_by(model_id, horizon) |> 
   summarise(mean_sd = mean(sd, na.rm = T)) |> 
+  mutate(model_id = factor(model_id, levels = levels(top_mods$model_id))) |> 
   ggplot(aes(x=horizon, 
              y = mean_sd, colour = model_id)) +
-  geom_line()  +  
+  geom_line()+
   labs(y='mean standard deviation', x = 'Horizon (days)') +
-  scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9) +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
   theme_bw()
 
 bias <- temperature_scores |> 
@@ -256,19 +262,21 @@ bias <- temperature_scores |>
          abs_bias = abs(mean - observation)) |> 
   filter(model_id %in% top_mods$model_id, 
          horizon > 0, 
+         horizon != 15,
          horizon <=30) |>
   group_by(model_id, horizon) |> 
   summarise(mean_abs_bias = mean(abs_bias, na.rm = T)) |> 
+  mutate(model_id = factor(model_id, levels = levels(top_mods$model_id))) |> 
   ggplot(aes(x=horizon, 
              y = mean_abs_bias, colour = model_id)) +
-  geom_line()  +  
+  geom_line()+
   labs(y='mean absolute bias', x = 'Horizon (days)') +
-  scale_color_viridis_d(option = 'A', begin = 0.1, end =0.9) +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
   theme_bw() +
   coord_cartesian(ylim = c(0, 2.5))
 
-ggpubr::ggarrange(sd, bias, labels = 'auto', align = 'v', nrow = 2) |> 
-  ggsave(filename = 'Plots/Figure4.png')
+ggpubr::ggarrange(sd, bias, labels = 'auto', align = 'v', nrow = 2, common.legend = T, legend = 'right') |> 
+  ggsave(filename = 'Plots/Figure4.png', height = 15, width = 14, units = 'cm')
 ```
 
 ## Figure 4 - NOAA scores
@@ -295,6 +303,7 @@ NOAA_scores |>
   group_by(model_id, site_id, horizon) |> 
   summarise(mean_crps = mean(crps, na.rm = T)) |> 
   filter(horizon <= 30) |> 
+  mutate(site_id = factor(site_id, levels = lake_sites)) |> 
   ggplot(aes(x=horizon, y=mean_crps, colour = model_id)) +
   geom_line() +
   facet_wrap(~site_id) +
@@ -304,18 +313,166 @@ NOAA_scores |>
 
 ```
 
+## Figure 5: reliability plots
+
+```{r}
+source('../R/reliability_plot.R')
+
+good_80 <- 
+  plot_reliability(scores = temperature_scores,
+                            models = top_mods$model_id, 
+                            CI = 80, 
+                            order = levels(top_mods$model_id)) +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  theme_bw() +
+  scale_y_continuous(limits = c(45, 100))
+
+good_95 <- plot_reliability(scores = temperature_scores,
+                            models = top_mods$model_id, 
+                            CI = 95, 
+                            order = levels(top_mods$model_id)) +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  theme_bw() +
+  scale_y_continuous(limits = c(45, 100))
+
+bad_mods <- model_meta |> 
+  filter(!model_id %in% top_mods$model_id) |> 
+  pull(model_id)
+
+bad_80 <- 
+  plot_reliability(scores = temperature_scores,
+                   models = bad_mods, 
+                   CI = 80, 
+                   order = bad_mods) +
+  scale_colour_discrete(name = 'Model') +
+  theme_bw() +
+  scale_y_continuous(limits = c(0, 100))
+
+bad_95 <- plot_reliability(scores = temperature_scores,
+                            models = bad_mods, 
+                            CI = 95, 
+                            order = bad_mods) +
+  scale_colour_discrete(name = 'Model') +
+  theme_bw() +
+  scale_y_continuous(limits = c(0, 100))
+
+ggarrange(ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none'), nrow = 2, align = 'hv') |> 
+  ggsave(filename = 'Plots/Figure5.png', height = 25, width = 18, units = 'cm')
+```
+
 ## site differences in observations?
 
+```{r target-plot}
+targets <- readr::read_csv("https://data.ecoforecast.org/neon4cast-targets/aquatics/aquatics-targets.csv.gz") |> 
+  na.omit()
+
+layout_design <- "
+  A#
+  BC
+  DE
+  FG
+"
+
+# is 2023 a stand out year?
+obs <- targets |> 
+  filter(variable == 'temperature',
+         site_id %in% lake_sites) |> 
+  mutate(doy = yday(datetime),
+         year = year(datetime),
+         is_2023 = ifelse(year == 2023, 2023, 2022),
+         site_id = factor(site_id, levels = lake_sites)) |> 
+  ggplot(aes(x=doy, y=observation, colour = is_2023)) +
+  geom_jitter(show.legend = F, aes(alpha = is_2023), size = 0.7, height = 0.2) +
+  facet_manual(~factor(site_id, levels = lake_sites),
+                 design = layout_design) +
+  scale_colour_viridis_c(begin = 0, end = 0.6) +
+  labs(x= 'Day of year', y = 'Observation (oC)') +
+  scale_alpha(range = c(0.5, 0.8))+
+  scale_x_continuous(expand = c(0.01,0)) +
+  scale_y_continuous(expand = c(0,0),
+                     limits = c(0,35)) +
+  theme_bw()
+  
+ggsave(obs, filename = 'Plots/Figure6.png', width = 20, height=15, units = 'cm')
+
+```
+
+
 ```{r obs-cv}
-temperature_scores |> 
-  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
-  filter(between(horizon, 0,30)) |> 
-  group_by(site_id, variable, horizon) |> 
+cv_obs <- targets |> 
+  mutate(site_id = factor(site_id, levels = lake_sites), 
+         year = year(datetime)) |> 
+  filter(variable == 'temperature',
+         site_id %in% lake_sites,
+         year < 2024) |> 
+  group_by(site_id, year, variable) |> 
   summarise(cv = sd(observation, na.rm = T)/ mean(observation, na.rm = T)) |> 
-  ggplot(aes(x=horizon, y= cv, colour = site_id)) +
+  ggplot(aes(x=year, y= cv, colour = site_id)) +
+  geom_line() +
   geom_point() +
   scale_colour_viridis_d(option = 'turbo') +
   theme_bw()
+
+ggarrange(obs, cv_obs)
+```
+## Reliability plots
+
+```{r}
+layout_design <- "
+  A#
+  BC
+  DE
+  FG
+"
+
+temperature_scores |> 
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
+  filter(model_id %in% top_mods$model_id, 
+         horizon >0,
+         horizon <=30,
+         !is.na(observation)) |> 
+  mutate(cf = between(observation, quantile10, quantile90),
+         site_id = factor(site_id, levels = lake_sites), 
+         model_id = factor(model_id, levels = levels(top_mods$model_id))) |> 
+  group_by(horizon, cf, site_id, model_id) |> 
+  summarise(n = n()) |> 
+  pivot_wider(names_from = cf, names_prefix = 'within_', values_from = n, values_fill = 0) |> 
+  mutate(perc = within_TRUE/(within_FALSE + within_TRUE)*100) |> 
+  ggplot(aes(x=horizon, y=perc, colour = model_id)) +
+  geom_hline(yintercept = 80, colour = 'grey3', linetype = 'dashed')+
+  geom_line(alpha = 0.8) +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  labs(y = 'Percentage of observations within\n95% confidence intervals', x='Horizon (days)') +
+  facet_manual(~factor(site_id, levels = lake_sites),
+                 design = layout_design) +
+  scale_x_continuous(expand = c(0,0)) +
+  theme_bw()
+
+temperature_scores |> 
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
+  filter(model_id %in% top_mods$model_id, 
+         horizon >0,
+         horizon <=30,
+         !is.na(observation)) |> 
+  mutate(cf = between(observation, quantile02.5, quantile97.5),
+         site_id = factor(site_id, levels = lake_sites), 
+         model_id = factor(model_id, levels = levels(top_mods$model_id))) |> 
+  group_by(horizon, cf, site_id, model_id) |> 
+  summarise(n = n()) |> 
+  pivot_wider(names_from = cf, names_prefix = 'within_', values_from = n, values_fill = 0) |> 
+  mutate(perc = within_TRUE/(within_FALSE + within_TRUE)*100) |> 
+  ggplot(aes(x=horizon, y=perc, colour = model_id)) +
+  geom_hline(yintercept = 95, colour = 'grey3', linetype = 'dashed')+
+  geom_line(alpha = 0.8) +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  labs(y = 'Percentage of observations within\n95% confidence intervals', x='Horizon (days)') +
+  facet_manual(~factor(site_id, levels = lake_sites),
+                 design = layout_design) +
+  scale_x_continuous(expand = c(0,0)) +
+  theme_bw()
+
+
+
 ```
 
 
@@ -326,7 +483,8 @@ temperature_skill |>
   left_join(model_meta, by = 'model_id') |>
   filter(model_type != 'null') |> 
   group_by(model_type, model_id, site_id) |> 
-  summarise(mean_skill = mean(skill_crps, na.rm = T)) |>  
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |> 
+  mutate(site_id = factor(site_id, levels = lake_sites)) |> 
   ggplot(aes(x = mean_skill, 
              y = site_id, 
              colour = model_type)) +
@@ -344,6 +502,7 @@ temperature_skill |>
          reference_datetime < as_date('2023-09-18')) |> 
   group_by(model_type, model_id, site_id) |> 
   summarise(mean_skill = mean(skill_crps, na.rm = T)) |>  
+  mutate(site_id = factor(site_id, levels = rev(lake_sites))) |> 
   ggplot(aes(x = mean_skill, 
              y = site_id, 
              colour = model_type)) +
