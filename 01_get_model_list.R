@@ -13,14 +13,8 @@ model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
 
 
 # What and when?
-forecast_dates <- as.character(seq.Date(as_date('2023-01-01'), Sys.Date(), 'day'))
+forecast_dates <- as.character(seq.Date(as_date('2023-01-01'), as_date('2023-12-31'), 'day'))
 variables <- c('temperature', 'oxygen', 'chla')
-
-# Build/update local database using the recent_submissions
-
-# Grab the data from the score bucket
-scores_s3 <- arrow::s3_bucket("neon4cast-scores/parquet/aquatics/",
-                              endpoint_override= "data.ecoforecast.org", anonymous = T)
 
 
 # build a local parquet database from which to query
@@ -29,6 +23,6 @@ scores_s3 |>
   dplyr::filter(reference_datetime %in% forecast_dates,
                 variable %in% variables,
                 model_id %in% model_meta$model_id) |>
-  arrow::write_dataset("scores_rescored", partitioning=c("model_id", "site_id"))
+  arrow::write_dataset("scores_2023", partitioning=c("model_id", "site_id"))
 
 #====================================================================#
