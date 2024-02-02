@@ -1,0 +1,388 @@
+---
+title: "Manuscript figures"
+output: html_document
+date: "2024-01-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(arrow)
+library(lubridate)
+library(tidytext)
+library(ggpattern)
+library(ggpubr)
+library(ggh4x)
+```
+
+## Read in the data and model metadata
+```{r read-in-data}
+
+lake_sites <- c('TOOK', 'PRLA','PRPO', 'CRAM', 'LIRO','BARC', 'SUGG')
+cols_modeltype <- c('empirical' = "#482576FF",
+                    'multi-model ensemble' =  "#35608DFF",
+                    'process' = "#21908CFF",
+                    'ML' = '#BBDF27FF',
+                    'null' = '#A9A9A9')
+# read in the metadata from the google sheet
+googlesheets4::gs4_deauth()
+model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing")
+
+# Open dataset-------------
+# start with lake temperatures
+temperature_scores <- arrow::open_dataset("./scores_2023") |>
+  filter(site_id %in% lake_sites,
+         model_id %in% model_meta$model_id,
+         variable == 'temperature') |>
+  collect()
+
+
+# Calculate skill scores ------------
+temperature_climatology <- arrow::open_dataset("./scores_2023") |>
+  filter(model_id == 'climatology', 
+         site_id %in% lake_sites,
+         variable == 'temperature') |>
+  collect() |> 
+  select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
+  arrange(reference_datetime, datetime, site_id) |> 
+  pivot_wider(values_from = c(crps, logs),
+              names_from = model_id)
+
+temperature_skill <- temperature_scores |>
+  filter(model_id != 'climatology') |> 
+  select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
+  full_join(temperature_climatology) |> 
+  
+  # calcaulte the skill relative to climatology (- is bad, + is good)
+  mutate(skill_crps = crps_climatology - crps,
+         skill_logs = logs_climatology - logs,
+         horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
+  # consistent forecast period
+  filter(horizon <= 30,
+         horizon >= 1, 
+         horizon != 15) |> 
+  arrange(reference_datetime, site_id, datetime, model_id) 
+```
+
+
+## Figure 1
+
+```{r model-type, fig.width=10}
+top10_temp <- 
+  temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  ungroup() |>
+  slice_max(mean_crps, n= 10, na_rm = T) |>
+  left_join(model_meta) |> 
+  mutate(model_id = fct_reorder(model_id, mean_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
+  ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
+  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+                   stat = "identity",
+                   alpha = 0.8, 
+                   pattern_fill = "black",
+                   colour = "black", 
+                   pattern_spacing = 0.04,
+                   pattern_alpha = 1) + 
+  scale_y_reordered() +
+  labs(y='Model', x = 'mean CRPS skill (vs climatology)') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe')) +
+  scale_pattern_type_manual(values=c(NA, NA)) +
+  theme_bw() + 
+  guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
+                                title = 'Uses weather covariates?'),
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
+
+all_temp <- 
+  temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  left_join(model_meta) |> 
+  mutate(model_id = fct_reorder(model_id, mean_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
+  ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
+
+  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+                   stat = "identity",
+                   alpha = 0.8, 
+                   pattern_fill = "black",
+                   colour = "black", width = 0.8,
+                   pattern_spacing = 0.03,
+                   pattern_alpha = 1) + 
+  scale_y_reordered() +
+  labs(y='Model', x = 'mean CRPS skill (vs climatology)') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses weather covariates?') +
+  scale_pattern_type_manual(values=c(NA, NA), name = 'Uses weather covariates?') +
+  theme_bw() + 
+  guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses weather covariates?'),
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
+
+ggpubr::ggarrange(top10_temp, all_temp, nrow = 1, align = 'hv',
+                  common.legend = T,
+                  legend = 'top', labels = 'auto') |> 
+  ggsave(filename = './Plots/Figure1.png', width = 25, height = 10, units = 'cm')
+
+```
+
+
+## Figure 2
+```{r horizon-score}
+# top 10 average models
+top_mods <- temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  ungroup() |> 
+  slice_max(mean_crps, n = 10, na_rm = T) |> 
+  distinct(model_id)
+
+
+B <- 
+  temperature_skill |> 
+  filter(model_id %in% top_mods$model_id) |> 
+  group_by(model_id, horizon) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  ggplot(aes(x=horizon, 
+             y = mean_crps, colour = fct_reorder(model_id, mean_crps, .desc = T))) +
+  geom_hline(yintercept = 0) + 
+  geom_line()  +  
+  labs(y='mean CRPS skill (vs climatology)', x = 'Horizon (days)') +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  theme_bw()
+
+ggpubr::ggarrange(B) |> 
+  ggsave(filename = 'Plots/Figure2.png', width = 15, height = 17, units = 'cm')
+```
+
+
+## Figure 3
+```{r bias-sd}
+# top 10 average models
+top_mods <- temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  ungroup() |> 
+  slice_max(mean_crps, n = 10, na_rm = T) |> 
+  mutate(model_id = fct_reorder(model_id, mean_crps, .desc = T)) |> 
+  distinct(model_id) 
+
+sd <- temperature_scores |> 
+  mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |> 
+  filter(model_id %in% top_mods$model_id, 
+         horizon > 0, 
+         horizon != 15,
+         horizon <=30) |>
+  group_by(model_id, horizon) |> 
+  summarise(mean_sd = mean(sd, na.rm = T)) |> 
+  mutate(model_id = factor(model_id, levels = levels(top_mods$model_id))) |> 
+  ggplot(aes(x=horizon, 
+             y = mean_sd, colour = model_id)) +
+  geom_line()+
+  labs(y='mean standard deviation', x = 'Horizon (days)') +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  theme_bw()
+
+bias <- temperature_scores |> 
+  mutate(horizon = as_date(datetime) - as_date(reference_datetime),
+         abs_bias = abs(mean - observation)) |> 
+  filter(model_id %in% top_mods$model_id, 
+         horizon > 0, 
+         horizon != 15,
+         horizon <=30) |>
+  group_by(model_id, horizon) |> 
+  summarise(mean_abs_bias = mean(abs_bias, na.rm = T)) |> 
+  mutate(model_id = factor(model_id, levels = levels(top_mods$model_id))) |> 
+  ggplot(aes(x=horizon, 
+             y = mean_abs_bias, colour = model_id)) +
+  geom_line()+
+  labs(y='mean absolute bias', x = 'Horizon (days)') +
+  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  theme_bw() +
+  coord_cartesian(ylim = c(0, 2.5))
+
+ggpubr::ggarrange(sd, bias, labels = 'auto', align = 'v', nrow = 2, common.legend = T, legend = 'right') |> 
+  ggsave(filename = 'Plots/Figure3.png', height = 15, width = 14, units = 'cm')
+```
+
+## Figure 4
+
+```{r reliability}
+source('./R/reliability_plot.R')
+
+good_80 <- 
+  plot_reliability(scores = temperature_scores,
+                            models = top_mods$model_id, 
+                            CI = 80, 
+                            order = levels(top_mods$model_id)) +
+  scale_color_brewer(name = 'Top Models', palette = 'Paired') +
+  theme_bw() +
+  scale_y_continuous(limits = c(0, 100))
+
+good_95 <- plot_reliability(scores = temperature_scores,
+                            models = top_mods$model_id, 
+                            CI = 95, 
+                            order = levels(top_mods$model_id)) +
+  scale_color_brewer(name = 'Top Models', palette = 'Paired') +
+  theme_bw() +
+  scale_y_continuous(limits = c(0, 100))
+
+bad_mods <- model_meta |> 
+  filter(!model_id %in% top_mods$model_id) |> 
+  pull(model_id)
+
+bad_80 <- 
+  plot_reliability(scores = temperature_scores,
+                   models = bad_mods, 
+                   CI = 80, 
+                   order = bad_mods) +
+  theme_bw() +
+  scale_colour_discrete(name = '') +
+  scale_y_continuous(limits = c(0, 100)) + 
+  theme(legend.position = 'bottom') + 
+  guides(colour = guide_legend(nrow = 5))
+
+bad_95 <- plot_reliability(scores = temperature_scores,
+                            models = bad_mods, 
+                            CI = 95, 
+                            order = bad_mods) +
+  theme_bw() +
+  scale_y_continuous(limits = c(0, 100)) 
+
+ggarrange(ggarrange(ggarrange(get_legend(good_80), NULL, nrow = 2),
+          ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none'), ncol = 2, 
+          widths = c(1,5)),
+          ggarrange(NULL, get_legend(bad_80), ncol = 2, widths = c(1,5)),
+          ncol = 1, heights = c(5, 1)) |> 
+  ggsave(filename = 'Plots/Figure4.png', height = 17.6, width = 22, units = 'cm')
+```
+
+## Figure 5
+```{r model_type-site}
+n_model_type <- temperature_skill |> 
+  distinct(model_id) |> 
+  left_join(model_meta) |>
+  group_by(model_type) |> 
+  summarise(n = n())  |> 
+  mutate(site_id = 'TOOK', mean_skill = -3.5) |> 
+  filter(model_type != 'null')
+
+
+# top 10 average models
+top_mods <- temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  ungroup() |> 
+  slice_max(mean_crps, n = 10, na_rm = T) |> 
+  distinct(model_id)
+
+A <- temperature_skill |> 
+  left_join(model_meta, by = 'model_id') |>
+  filter(model_type != 'null') |> 
+  group_by(model_type, model_id, site_id) |> 
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |>  
+  ggplot(aes(x = mean_skill, 
+             y = site_id, 
+             colour = model_type)) +
+  geom_vline(xintercept = 0, linetype = 'solid') +
+  geom_label(data = n_model_type, aes(label = paste0('n = ', n)))+ 
+  geom_boxplot() +
+  facet_wrap(~model_type, scales = 'free_y',nrow = 4) +
+  labs(y='Site', x = 'mean CRPS skill (vs climatology)') +
+  scale_colour_manual(values = cols_modeltype) +
+  theme_bw() 
+  
+B <- temperature_skill |> 
+  filter(model_id %in% top_mods$model_id) |> 
+  group_by(site_id, horizon) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  mutate(site_id = factor(site_id, levels = lake_sites)) |> 
+  ggplot(aes(x=horizon, 
+             y = mean_crps, colour = site_id)) +
+  geom_hline(yintercept = 0) + 
+  geom_line()  +  
+  labs(y='mean CRPS skill (vs climatology)', x = 'Horizon (days)') +
+  scale_color_viridis_d(option = 'H') +
+  theme_bw()
+
+ggarrange(A, B, widths = c(1,1)) |> 
+  ggsave(filename = './Plots/Figure5.png', width = 25, height = 15, units = 'cm')
+```
+
+## Figure 6
+
+```{r target-plot}
+targets <- readr::read_csv("https://data.ecoforecast.org/neon4cast-targets/aquatics/aquatics-targets.csv.gz") |> 
+  na.omit()
+
+layout_design <- "
+  A#
+  BC
+  DE
+  FG
+"
+
+# is 2023 a stand out year?
+obs <- targets |> 
+  filter(variable == 'temperature',
+         site_id %in% lake_sites, 
+         year(datetime) < 2024) |> 
+  mutate(doy = yday(datetime),
+         year = year(datetime),
+         is_2023 = ifelse(year == 2023, 2023, 2022),
+         site_id = factor(site_id, levels = lake_sites)) |> 
+  ggplot(aes(x=doy, y=observation, colour = is_2023)) +
+  geom_jitter(show.legend = F, aes(alpha = is_2023), size = 0.7, height = 0.2) +
+  facet_manual(~factor(site_id, levels = lake_sites),
+                 design = layout_design) +
+  scale_colour_viridis_c(option = 'mako', begin = 0.1, end = 0.8) +
+  labs(x= 'Day of year', y = 'Observation (°C)') +
+  scale_alpha(range = c(0.5, 0.8))+
+  scale_x_continuous(expand = c(0.01,0)) +
+  scale_y_continuous(expand = c(0,0),
+                     limits = c(0,35)) +
+  theme_bw()
+  
+cv_obs <- 
+  targets |> 
+  mutate(site_id = factor(site_id, levels = lake_sites), 
+         year = year(datetime)) |> 
+  filter(variable == 'temperature',
+         site_id %in% lake_sites,
+         year < 2024) |> 
+  group_by(site_id, year, variable) |> 
+  summarise(cv = sd(observation, na.rm = T)/ mean(observation, na.rm = T)) |> 
+  mutate(is_2023 = ifelse(year == 2023, '2023', 'other years' )) |> 
+  ggplot(aes(y = site_id, x = cv, colour = is_2023)) +
+  geom_point() +
+  scale_colour_viridis_d(option = 'mako', begin = 0.8, end = 0.1, name = '') +
+  scale_y_discrete(limits = rev)+
+  theme_bw() +
+  labs(x = 'Coefficient of variation', y = 'Site')
+
+
+ggarrange(obs, cv_obs, widths = c(1, 1.5)) |> 
+  ggsave(filename = 'Plots/Figure6.png', width = 20, height=10, units = 'cm')
+
+```
+
+
+```{r}
+targets |> 
+  filter(variable == 'temperature',
+         site_id %in% lake_sites, 
+         year(datetime) < 2024) |> 
+  mutate(doy = yday(datetime),
+         year = year(datetime),
+         site_id = factor(site_id, levels = lake_sites), 
+         is_2023 = ifelse(year == 2023, T, F))  |> 
+  group_by(site_id, is_2023) |> 
+  summarise(mean = mean(observation),
+            sd = sd(observation)) |> 
+  filter(site_id  == 'BARC')
+```
+ 
+ 
