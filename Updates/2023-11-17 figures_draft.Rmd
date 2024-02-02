@@ -30,19 +30,17 @@ model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
 
 # Open dataset-------------
 # start with lake temperatures
-temperature_scores <- arrow::open_dataset("../scores_rescored") |>
+temperature_scores <- arrow::open_dataset("../scores_2023") |>
   filter(site_id %in% lake_sites,
-         horizon != 15,
          model_id %in% model_meta$model_id,
          variable == 'temperature') |>
   collect()
 
 
 # Calculate skill scores ------------
-temperature_climatology <- arrow::open_dataset("../scores_rescored") |>
+temperature_climatology <- arrow::open_dataset("../scores_2023") |>
   filter(model_id == 'climatology', 
          site_id %in% lake_sites,
-         horizon != 15,
          variable == 'temperature') |>
   collect() |> 
   select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
@@ -61,8 +59,8 @@ temperature_skill <- temperature_scores |>
          horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
   # consistent forecast period
   filter(horizon <= 30,
-         horizon >= 1,
-         model_id != 'fARIMA') |> 
+         horizon >= 1, 
+         horizon != 15) |> 
   arrange(reference_datetime, site_id, datetime, model_id) 
 ```
 
@@ -287,7 +285,7 @@ can this be related to the weather forecasts?
 There is only one month when the observations overlap for the observational data...
 But still the performance is better vs the observations than the stage 3
 
-```{r}
+```{r eval = F}
 NOAA_scores <- arrow::open_dataset("../scores") |>
   filter(site_id %in% lake_sites,
          model_id %in% c('NOAA_daily', 'NOAA_daily_obs')) |>
@@ -324,17 +322,17 @@ good_80 <-
                             models = top_mods$model_id, 
                             CI = 80, 
                             order = levels(top_mods$model_id)) +
-  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  scale_color_brewer(name = 'Top Models', palette = 'Paired') +
   theme_bw() +
-  scale_y_continuous(limits = c(45, 100))
+  scale_y_continuous(limits = c(0, 100))
 
 good_95 <- plot_reliability(scores = temperature_scores,
                             models = top_mods$model_id, 
                             CI = 95, 
                             order = levels(top_mods$model_id)) +
-  scale_color_brewer(name = 'Model', palette = 'Paired') +
+  scale_color_brewer(name = 'Top Models', palette = 'Paired') +
   theme_bw() +
-  scale_y_continuous(limits = c(45, 100))
+  scale_y_continuous(limits = c(0, 100))
 
 bad_mods <- model_meta |> 
   filter(!model_id %in% top_mods$model_id) |> 
@@ -345,20 +343,25 @@ bad_80 <-
                    models = bad_mods, 
                    CI = 80, 
                    order = bad_mods) +
-  scale_colour_discrete(name = 'Model') +
   theme_bw() +
-  scale_y_continuous(limits = c(0, 100))
+  scale_colour_discrete(name = '') +
+  scale_y_continuous(limits = c(0, 100)) + 
+  theme(legend.position = 'bottom') + 
+  guides(colour = guide_legend(nrow = 5))
 
 bad_95 <- plot_reliability(scores = temperature_scores,
                             models = bad_mods, 
                             CI = 95, 
                             order = bad_mods) +
-  scale_colour_discrete(name = 'Model') +
   theme_bw() +
-  scale_y_continuous(limits = c(0, 100))
+  scale_y_continuous(limits = c(0, 100)) 
 
-ggarrange(ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none'), nrow = 2, align = 'hv') |> 
-  ggsave(filename = 'Plots/Figure5.png', height = 25, width = 18, units = 'cm')
+ggarrange(ggarrange(ggarrange(get_legend(good_80), NULL, nrow = 2),
+          ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none'), ncol = 2, 
+          widths = c(1,5)),
+          ggarrange(NULL, get_legend(bad_80), ncol = 2, widths = c(1,5)),
+          ncol = 1, heights = c(5, 1)) |> 
+  ggsave(filename = 'Plots/Figure5.png', height = 17.6, width = 22, units = 'cm')
 ```
 
 ## site differences in observations?

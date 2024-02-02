@@ -12,12 +12,12 @@ all_ensemble_scores <- arrow::open_dataset("scores_rescored/") |>
          variable == 'temperature') |>
   collect() 
 
-all_ensemble_scores |> 
+top10 <- all_ensemble_scores |> 
   mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |>
-  group_by(model_id, site_id) |> 
+  group_by(model_id) |> 
   summarise(mean_crps = mean(crps, na.rm = T)) |> 
-  group_by(site_id) |> 
-  slice_min(mean_crps, n= 5)
+  ungroup() |> 
+  slice_min(mean_crps, n= 10)
 
 googlesheets4::gs4_deauth()
 model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing")
@@ -155,8 +155,10 @@ design <- "
 ranks |> 
   full_join(all_vals) |> 
   mutate(proportion = ifelse(is.na(proportion), 0, proportion)) |> 
-  filter(model_id %in% c('all_submissions', 'cb_prophet', 'GLEON_physics', 'flareGLM', 
-                         'fARIMA','tg_randfor', 'xgboost_parallel')) |> 
+  filter(model_id %in% c('all_submissions', 'cb_prophet', 'flareGLM', 'xgboost_parallel', 
+                         'air2waterSat_2', 'tg_ets', 'tg_tbats')) |> 
+  mutate(model_id = factor(model_id, levels = c('all_submissions', 'cb_prophet', 'flareGLM', 'xgboost_parallel', 
+                                      'air2waterSat_2', 'tg_ets', 'tg_tbats'))) |> 
   mutate(group_rank = cut(rank,
                           breaks = ceiling(seq(0, 31, length.out =11)),
                           labels = seq(1,10, length.out = 10))) |> 
@@ -175,7 +177,7 @@ ranks |>
         panel.spacing.y = unit(1.1, 'lines'), 
         legend.position = 'none', panel.grid.major.y = element_blank()) +
   scale_x_continuous(name = '% of forecasts', breaks = seq(0, 0.3, 0.1), labels = seq(0, 30, 10)) +
-  scale_y_discrete(breaks = c(1,10), labels = c('best 10 %', 'worst 10 %'), name = '')
-#------------------------------------------
+  scale_y_discrete(breaks = c(1,10), labels = c('best 10 %', 'worst 10 %'), name = '', limits = rev)
+ #------------------------------------------
 
 
