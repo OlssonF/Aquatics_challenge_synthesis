@@ -20,7 +20,7 @@ library(ggh4x)
 
 lake_sites <- c('TOOK', 'PRLA','PRPO', 'CRAM', 'LIRO','BARC', 'SUGG')
 cols_modeltype <- c('empirical' = "#482576FF",
-                    'multi-model ensemble' =  "#35608DFF",
+                    'MME' =  "#35608DFF",
                     'process' = "#21908CFF",
                     'ML' = '#BBDF27FF',
                     'null' = '#A9A9A9')
@@ -75,10 +75,11 @@ top10_temp <-
   ungroup() |>
   slice_max(mean_crps, n= 10, na_rm = T) |>
   left_join(model_meta) |> 
-  mutate(model_id = fct_reorder(model_id, mean_crps),
-         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
-  ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
-  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
+         uses_AT = str_detect(NOAA_var, 'air_temperature')) |> 
+  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
+  geom_bar_pattern(aes(pattern = as.factor(uses_AT)),
                    stat = "identity",
                    alpha = 0.8, 
                    pattern_fill = "black",
@@ -86,14 +87,14 @@ top10_temp <-
                    pattern_spacing = 0.04,
                    pattern_alpha = 1) + 
   scale_y_reordered() +
-  labs(y='Model', x = 'mean CRPS skill (vs climatology)') +
+  labs(y='Model', x = 'mean relative skill (°C)') +
   geom_vline(xintercept = 0) +
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
   scale_pattern_type_manual(values=c(NA, NA)) +
   theme_bw() + 
   guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
-                                title = 'Uses weather covariates?'),
+                                title = 'Uses air temperature as a covariate?'),
          fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
 
 all_temp <- 
@@ -101,11 +102,12 @@ all_temp <-
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   left_join(model_meta) |> 
-  mutate(model_id = fct_reorder(model_id, mean_crps),
-         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no')) |> 
-  ggplot(aes(x=mean_crps, y = model_id, fill = model_type)) +    # Different pattern for each group
+  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
+         uses_AT = str_detect(NOAA_var, 'air_temperature')) |> 
+  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
 
-  geom_bar_pattern(aes(pattern = as.factor(uses_NOAA)),
+  geom_bar_pattern(aes(pattern = as.factor(uses_AT)),
                    stat = "identity",
                    alpha = 0.8, 
                    pattern_fill = "black",
@@ -113,13 +115,13 @@ all_temp <-
                    pattern_spacing = 0.03,
                    pattern_alpha = 1) + 
   scale_y_reordered() +
-  labs(y='Model', x = 'mean CRPS skill (vs climatology)') +
+  labs(y='Model', x = 'mean relative skill (°C)') +
   geom_vline(xintercept = 0) +
   scale_fill_manual(values = cols_modeltype) +
-  scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses weather covariates?') +
-  scale_pattern_type_manual(values=c(NA, NA), name = 'Uses weather covariates?') +
+  scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses air temperature as a covariate?') +
+  scale_pattern_type_manual(values=c(NA, NA), name = 'Uses air temperature as a covariate?') +
   theme_bw() + 
-  guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses weather covariates?'),
+  guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses air temperature as a covariate?'),
          fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
 
 ggpubr::ggarrange(top10_temp, all_temp, nrow = 1, align = 'hv',
@@ -129,46 +131,38 @@ ggpubr::ggarrange(top10_temp, all_temp, nrow = 1, align = 'hv',
 
 ```
 
-
 ## Figure 2
-```{r horizon-score}
+```{r skill-bias-sd}
 # top 10 average models
 top_mods <- temperature_skill |> 
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   ungroup() |> 
   slice_max(mean_crps, n = 10, na_rm = T) |> 
-  distinct(model_id)
+  left_join(select(model_meta, model_id, manuscript_name)) |> 
+  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps, .desc = T)) |> 
+  distinct(manuscript_name, model_id)
 
 
-B <- 
+skill <- 
   temperature_skill |> 
-  filter(model_id %in% top_mods$model_id) |> 
+  filter(model_id %in% top_mods$model_id, 
+         horizon > 0, 
+         horizon != 15,
+         horizon <=30) |> 
   group_by(model_id, horizon) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  left_join(select(model_meta, model_id, manuscript_name)) |> 
+  mutate(manuscript_name = factor(manuscript_name, levels = levels(top_mods$manuscript_name))) |> 
   ggplot(aes(x=horizon, 
-             y = mean_crps, colour = fct_reorder(model_id, mean_crps, .desc = T))) +
-  geom_hline(yintercept = 0) + 
+             y = mean_crps, colour = manuscript_name)) +
+  geom_hline(yintercept = 0, colour = 'grey40' ) + 
   geom_line()  +  
-  labs(y='mean CRPS skill (vs climatology)', x = 'Horizon (days)') +
+  labs(y='mean relative skill (°C)', x = 'Horizon (days)') +
   scale_color_brewer(name = 'Model', palette = 'Paired') +
   theme_bw()
 
-ggpubr::ggarrange(B) |> 
-  ggsave(filename = 'Plots/Figure2.png', width = 15, height = 17, units = 'cm')
-```
-
-
-## Figure 3
-```{r bias-sd}
-# top 10 average models
-top_mods <- temperature_skill |> 
-  group_by(model_id) |> 
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  ungroup() |> 
-  slice_max(mean_crps, n = 10, na_rm = T) |> 
-  mutate(model_id = fct_reorder(model_id, mean_crps, .desc = T)) |> 
-  distinct(model_id) 
+ 
 
 sd <- temperature_scores |> 
   mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |> 
@@ -178,11 +172,12 @@ sd <- temperature_scores |>
          horizon <=30) |>
   group_by(model_id, horizon) |> 
   summarise(mean_sd = mean(sd, na.rm = T)) |> 
-  mutate(model_id = factor(model_id, levels = levels(top_mods$model_id))) |> 
+  left_join(select(model_meta, model_id, manuscript_name)) |> 
+  mutate(manuscript_name = factor(manuscript_name, levels = levels(top_mods$manuscript_name))) |> 
   ggplot(aes(x=horizon, 
-             y = mean_sd, colour = model_id)) +
+             y = mean_sd, colour = manuscript_name)) +
   geom_line()+
-  labs(y='mean standard deviation', x = 'Horizon (days)') +
+  labs(y='mean standard deviation (°C)', x = 'Horizon (days)') +
   scale_color_brewer(name = 'Model', palette = 'Paired') +
   theme_bw()
 
@@ -192,53 +187,59 @@ bias <- temperature_scores |>
   filter(model_id %in% top_mods$model_id, 
          horizon > 0, 
          horizon != 15,
-         horizon <=30) |>
+         horizon <= 30) |>
   group_by(model_id, horizon) |> 
   summarise(mean_abs_bias = mean(abs_bias, na.rm = T)) |> 
-  mutate(model_id = factor(model_id, levels = levels(top_mods$model_id))) |> 
+  left_join(select(model_meta, model_id, manuscript_name)) |> 
+  mutate(manuscript_name = factor(manuscript_name, levels = levels(top_mods$manuscript_name))) |> 
   ggplot(aes(x=horizon, 
-             y = mean_abs_bias, colour = model_id)) +
+             y = mean_abs_bias, colour = manuscript_name)) +
   geom_line()+
-  labs(y='mean absolute bias', x = 'Horizon (days)') +
+  labs(y='mean absolute bias (°C)', x = 'Horizon (days)') +
   scale_color_brewer(name = 'Model', palette = 'Paired') +
   theme_bw() +
   coord_cartesian(ylim = c(0, 2.5))
 
-ggpubr::ggarrange(sd, bias, labels = 'auto', align = 'v', nrow = 2, common.legend = T, legend = 'right') |> 
-  ggsave(filename = 'Plots/Figure3.png', height = 15, width = 14, units = 'cm')
+ggpubr::ggarrange(skill, 
+                  ggarrange(as_ggplot(get_legend(bias)), NULL, widths = c(0.5, 1.5)),  
+                  sd, 
+                  bias, 
+                  legend = F, align = 'hv') |> 
+  ggsave(filename = 'Plots/Figure2.png', height = 16, width = 16, units = 'cm')
 ```
 
-## Figure 4
+## Figure 3
 
 ```{r reliability}
 source('./R/reliability_plot.R')
 
 good_80 <- 
   plot_reliability(scores = temperature_scores,
-                            models = top_mods$model_id, 
-                            CI = 80, 
-                            order = levels(top_mods$model_id)) +
+                   models = top_mods, # model_ids and manuscript names
+                   CI = 80, 
+                   order = levels(top_mods$manuscript_name)) +
   scale_color_brewer(name = 'Top Models', palette = 'Paired') +
   theme_bw() +
   scale_y_continuous(limits = c(0, 100))
 
 good_95 <- plot_reliability(scores = temperature_scores,
-                            models = top_mods$model_id, 
+                            models = top_mods, 
                             CI = 95, 
-                            order = levels(top_mods$model_id)) +
+                            order = levels(top_mods$manuscript_name)) +
   scale_color_brewer(name = 'Top Models', palette = 'Paired') +
   theme_bw() +
   scale_y_continuous(limits = c(0, 100))
 
+# get the list of bad models
 bad_mods <- model_meta |> 
   filter(!model_id %in% top_mods$model_id) |> 
-  pull(model_id)
+  select(model_id, manuscript_name)
 
 bad_80 <- 
   plot_reliability(scores = temperature_scores,
                    models = bad_mods, 
                    CI = 80, 
-                   order = bad_mods) +
+                   order = bad_mods$manuscript_name) +
   theme_bw() +
   scale_colour_discrete(name = '') +
   scale_y_continuous(limits = c(0, 100)) + 
@@ -248,7 +249,7 @@ bad_80 <-
 bad_95 <- plot_reliability(scores = temperature_scores,
                             models = bad_mods, 
                             CI = 95, 
-                            order = bad_mods) +
+                            order = bad_mods$manuscript_name) +
   theme_bw() +
   scale_y_continuous(limits = c(0, 100)) 
 
@@ -257,17 +258,17 @@ ggarrange(ggarrange(ggarrange(get_legend(good_80), NULL, nrow = 2),
           widths = c(1,5)),
           ggarrange(NULL, get_legend(bad_80), ncol = 2, widths = c(1,5)),
           ncol = 1, heights = c(5, 1)) |> 
-  ggsave(filename = 'Plots/Figure4.png', height = 17.6, width = 22, units = 'cm')
+  ggsave(filename = 'Plots/Figure3.png', height = 17.6, width = 23, units = 'cm')
 ```
 
-## Figure 5
+## Figure 4
 ```{r model_type-site}
 n_model_type <- temperature_skill |> 
   distinct(model_id) |> 
   left_join(model_meta) |>
   group_by(model_type) |> 
   summarise(n = n())  |> 
-  mutate(site_id = 'TOOK', mean_skill = -3.5) |> 
+  mutate(site_id = 'TOOK', mean_skill = -3.25) |> 
   filter(model_type != 'null')
 
 
@@ -290,9 +291,9 @@ A <- temperature_skill |>
   geom_vline(xintercept = 0, linetype = 'solid') +
   geom_label(data = n_model_type, aes(label = paste0('n = ', n)))+ 
   geom_boxplot() +
-  facet_wrap(~model_type, scales = 'free_y',nrow = 4) +
-  labs(y='Site', x = 'mean CRPS skill (vs climatology)') +
-  scale_colour_manual(values = cols_modeltype) +
+  facet_wrap(~model_type, scales = 'free_y',nrow = 2) +
+  labs(y='Site', x = 'mean relative skill (°C)') +
+  scale_colour_manual(values = cols_modeltype, name = 'Model Type') +
   theme_bw() 
   
 B <- temperature_skill |> 
@@ -302,17 +303,17 @@ B <- temperature_skill |>
   mutate(site_id = factor(site_id, levels = lake_sites)) |> 
   ggplot(aes(x=horizon, 
              y = mean_crps, colour = site_id)) +
-  geom_hline(yintercept = 0) + 
+  geom_hline(yintercept = 0, colour = 'grey40') + 
   geom_line()  +  
-  labs(y='mean CRPS skill (vs climatology)', x = 'Horizon (days)') +
-  scale_color_viridis_d(option = 'H') +
+  labs(y='mean relative skill (°C)', x = 'Horizon (days)') +
+  scale_color_viridis_d(option = 'H', name  = 'Site') +
   theme_bw()
 
-ggarrange(A, B, widths = c(1,1)) |> 
-  ggsave(filename = './Plots/Figure5.png', width = 25, height = 15, units = 'cm')
+cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'lr', labels = 'auto') |> 
+  ggsave(filename = './Plots/Figure4.png', width = 19, height = 16, units = 'cm')
 ```
 
-## Figure 6
+## Figure 5
 
 ```{r target-plot}
 targets <- readr::read_csv("https://data.ecoforecast.org/neon4cast-targets/aquatics/aquatics-targets.csv.gz") |> 
@@ -329,22 +330,24 @@ layout_design <- "
 obs <- targets |> 
   filter(variable == 'temperature',
          site_id %in% lake_sites, 
-         year(datetime) < 2024) |> 
+           year(datetime) < 2024) |> 
   mutate(doy = yday(datetime),
          year = year(datetime),
-         is_2023 = ifelse(year == 2023, 2023, 2022),
+         is_2023 = ifelse(year == 2023, '2023', 'other years' ),
          site_id = factor(site_id, levels = lake_sites)) |> 
   ggplot(aes(x=doy, y=observation, colour = is_2023)) +
-  geom_jitter(show.legend = F, aes(alpha = is_2023), size = 0.7, height = 0.2) +
+  geom_jitter(aes(alpha = is_2023), size = 0.7, height = 0.2) +
   facet_manual(~factor(site_id, levels = lake_sites),
-                 design = layout_design) +
-  scale_colour_viridis_c(option = 'mako', begin = 0.1, end = 0.8) +
+               design = layout_design) +
+  scale_colour_viridis_d(option = 'mako', begin = 0.8, end = 0.1, name ='') +
   labs(x= 'Day of year', y = 'Observation (°C)') +
-  scale_alpha(range = c(0.5, 0.8))+
+  scale_alpha_manual(values = c(0.7, 0.5), name = '', guide = F)+
   scale_x_continuous(expand = c(0.01,0)) +
   scale_y_continuous(expand = c(0,0),
                      limits = c(0,35)) +
-  theme_bw()
+  theme_bw() + 
+  theme(legend.position = c(0.75, 1))
+
   
 cv_obs <- 
   targets |> 
@@ -357,15 +360,15 @@ cv_obs <-
   summarise(cv = sd(observation, na.rm = T)/ mean(observation, na.rm = T)) |> 
   mutate(is_2023 = ifelse(year == 2023, '2023', 'other years' )) |> 
   ggplot(aes(y = site_id, x = cv, colour = is_2023)) +
-  geom_point() +
+  geom_point(show.legend = F) +
   scale_colour_viridis_d(option = 'mako', begin = 0.8, end = 0.1, name = '') +
   scale_y_discrete(limits = rev)+
   theme_bw() +
   labs(x = 'Coefficient of variation', y = 'Site')
 
 
-ggarrange(obs, cv_obs, widths = c(1, 1.5)) |> 
-  ggsave(filename = 'Plots/Figure6.png', width = 20, height=10, units = 'cm')
+ggarrange(obs, cv_obs, widths = c(1, 1.5), labels = 'auto') |> 
+  ggsave(filename = 'Plots/Figure5.png', width = 20, height=10, units = 'cm')
 
 ```
 
