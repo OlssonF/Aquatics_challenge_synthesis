@@ -31,6 +31,8 @@ model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
 # Open dataset-------------
 # start with lake temperatures
 temperature_scores <- arrow::open_dataset("./scores_2023") |>
+  dplyr::filter(!(model_id %in% c('flareGOTM','flareGOTM_noDA', 'flare_ler', 'flare_ler_baseline') &
+                  site_id == 'TOOK')) |> 
   filter(site_id %in% lake_sites,
          model_id %in% model_meta$model_id,
          variable == 'temperature') |>
@@ -327,48 +329,33 @@ layout_design <- "
 "
 
 # is 2023 a stand out year?
-obs <- targets |> 
+targets_2023 <- targets |> 
   filter(variable == 'temperature',
          site_id %in% lake_sites, 
-           year(datetime) < 2024) |> 
-  mutate(doy = yday(datetime),
-         year = year(datetime),
-         is_2023 = ifelse(year == 2023, '2023', 'other years' ),
-         site_id = factor(site_id, levels = lake_sites)) |> 
-  ggplot(aes(x=doy, y=observation, colour = is_2023)) +
-  geom_jitter(aes(alpha = is_2023), size = 0.7, height = 0.2) +
-  facet_manual(~factor(site_id, levels = lake_sites),
-               design = layout_design) +
-  scale_colour_viridis_d(option = 'mako', begin = 0.8, end = 0.1, name ='') +
-  labs(x= 'Day of year', y = 'Observation (°C)') +
-  scale_alpha_manual(values = c(0.7, 0.5), name = '', guide = F)+
-  scale_x_continuous(expand = c(0.01,0)) +
-  scale_y_continuous(expand = c(0,0),
-                     limits = c(0,35)) +
-  theme_bw() + 
-  theme(legend.position = c(0.75, 1))
+         year(datetime) == 2023) |> 
+  mutate(month = as.factor(month(datetime))) |> 
+  group_by(month, site_id) |> 
+  summarise(mean_obs = mean(observation, na.rm = T),
+            n = n()) |> 
+  mutate(mean_obs = ifelse(n < 18, NA, mean_obs))
 
-  
-cv_obs <- 
-  targets |> 
-  mutate(site_id = factor(site_id, levels = lake_sites), 
-         year = year(datetime)) |> 
+
+obs <- targets |> 
   filter(variable == 'temperature',
          site_id %in% lake_sites,
-         year < 2024) |> 
-  group_by(site_id, year, variable) |> 
-  summarise(cv = sd(observation, na.rm = T)/ mean(observation, na.rm = T)) |> 
-  mutate(is_2023 = ifelse(year == 2023, '2023', 'other years' )) |> 
-  ggplot(aes(y = site_id, x = cv, colour = is_2023)) +
-  geom_point(show.legend = F) +
-  scale_colour_viridis_d(option = 'mako', begin = 0.8, end = 0.1, name = '') +
-  scale_y_discrete(limits = rev)+
+         year(datetime) < 2023) |> 
+  mutate(month = as.factor(month(datetime))) |> 
+  ggplot(aes(x = month, y= observation), colour = "#26172AFF") +
+  geom_boxplot() +
+  facet_manual(~factor(site_id, levels = lake_sites),
+               design = layout_design) +
+  geom_point(data = targets_2023, aes(x = month, y = mean_obs), colour = '#60CEACFF') +
+  scale_x_discrete(name = 'Month', labels = month.abb) +
+  scale_y_continuous(name = 'Water temperature (°C)') +
   theme_bw() +
-  labs(x = 'Coefficient of variation', y = 'Site')
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
 
-
-ggarrange(obs, cv_obs, widths = c(1, 1.5), labels = 'auto') |> 
-  ggsave(filename = 'Plots/Figure5.png', width = 20, height=10, units = 'cm')
+ggsave(obs, filename = 'Plots/Figure5.png', width = 10, height=13, units = 'cm')
 
 ```
 
