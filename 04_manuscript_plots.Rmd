@@ -98,7 +98,7 @@ top10_temp <-
   theme_bw() + 
   guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
                                 title = 'Uses air temperature as a covariate?'),
-         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class'))
 
 all_temp <- 
   temperature_skill |> 
@@ -126,7 +126,7 @@ all_temp <-
   scale_pattern_type_manual(values=c(NA, NA), name = 'Uses air temperature as a covariate?') +
   theme_bw() + 
   guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses air temperature as a covariate?'),
-         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model type'))
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class'))
 
 ggpubr::ggarrange(top10_temp, all_temp, nrow = 1, align = 'hv',
                   common.legend = T,
@@ -191,7 +191,7 @@ bias <- temperature_scores |>
   labs(y='mean absolute bias (°C)', x = 'Horizon (days)') +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
   theme_bw() +
-  coord_cartesian(ylim = c(0, 2.5))
+  coord_cartesian(ylim = c(0, 2))
 
 ggpubr::ggarrange(skill, 
                   ggarrange(as_ggplot(get_legend(bias)), NULL, widths = c(0.5, 1.5)),  
@@ -284,11 +284,11 @@ A <- temperature_skill |>
              y = site_id, 
              colour = model_type)) +
   geom_vline(xintercept = 0, linetype = 'solid') +
-  geom_label(data = n_model_type, aes(label = paste0('n = ', n)))+ 
+  geom_text(data = n_model_type, aes(label = paste0('n = ', n)))+ 
   geom_boxplot() +
   facet_wrap(~model_type, scales = 'free_y',nrow = 2) +
   labs(y='Site', x = 'mean relative skill (°C)') +
-  scale_colour_manual(values = cols_modeltype, name = 'Model Type') +
+  scale_colour_manual(values = cols_modeltype, name = 'Model class') +
   theme_bw() 
   
 B <- temperature_skill |> 
@@ -301,7 +301,7 @@ B <- temperature_skill |>
   geom_hline(yintercept = 0, colour = 'grey40') + 
   geom_line()  +  
   labs(y='mean relative skill (°C)', x = 'Horizon (days)') +
-  scale_colour_brewer(palette = 'Dark2')+
+  scale_colour_brewer(palette = 'Dark2', name = 'Site')+
   theme_bw()
 
 cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'lr', labels = 'auto') |> 
