@@ -2,7 +2,7 @@ plot_reliability <- function(scores, models, CI, order = levels(models)) {
   
   if (CI == 95) {
     plot <- scores |> 
-      inner_join(models) |> 
+      inner_join(models, by = 'model_id') |> 
       mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
       filter(horizon >0,
              horizon != 15, 
@@ -17,13 +17,13 @@ plot_reliability <- function(scores, models, CI, order = levels(models)) {
       ggplot(aes(x=horizon, y=perc, colour = manuscript_name)) +
       geom_hline(yintercept = 95, colour = 'grey3', linetype = 'dashed')+
       geom_line(alpha = 0.8) +
-      labs(y = 'Percentage of observations within\n95% confidence intervals', x='Horizon (days)') +
-      annotate('text', x = 25, y = 100, label = 'underconfident') +
-      annotate('text', x = 25, y = 75, label = 'overconfident')
+      labs(y = 'Percentage of observations within\n95% confidence intervals', x='Horizon (days)')  +
+      annotate('text', x = 30, y = 100, label = 'underconfident', size = 5, hjust = 1) +
+      annotate('text', x = 30, y = 75, label = 'overconfident', size = 5, hjust = 1)
   }
   if (CI == 80) {
     plot <- scores |> 
-      inner_join(models) |> 
+      inner_join(models, by = 'model_id') |> 
       mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
       filter(horizon >0,
              horizon != 15, 
@@ -39,8 +39,8 @@ plot_reliability <- function(scores, models, CI, order = levels(models)) {
       geom_hline(yintercept = 80, colour = 'grey3', linetype = 'dashed')+
       geom_line(alpha = 0.8) +
       labs(y = 'Percentage of observations within\n80% confidence intervals', x='Horizon (days)') +
-      annotate('text', x = 25, y = 100, label = 'underconfident') +
-      annotate('text', x = 25, y = 75, label = 'overconfident')
+      annotate('text', x = 30, y = 100, label = 'underconfident', size = 5, hjust = 1) +
+      annotate('text', x = 30, y = 75, label = 'overconfident', size = 5, hjust = 1)
   }
   if (CI != 80 & CI != 95) {
     message('CI must be 80 or 95')
