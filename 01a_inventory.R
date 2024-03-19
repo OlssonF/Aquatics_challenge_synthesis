@@ -2,16 +2,20 @@ library(tidyverse)
 # inventory
 googlesheets4::gs4_deauth()
 model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing") |> 
-  mutate(unc_driver = ifelse(uses_NOAA == 1, 1, 0)) |> 
-  filter(!is.na(model_type))
+  mutate(unc_driver = ifelse(uses_NOAA == 1, 1, 0)) 
+
+
+# water temperature models only
+wt_meta <- model_meta |>
+  filter(str_detect(variable, 'temperature'))
 
 # types of uncertainty represented
 # Number of models that contain each type
-model_meta |> 
+wt_meta |> 
   summarise(across(contains('unc'), ~ sum(.x, na.rm = T)))
 
 # How many sources are represented in each model?
-model_meta |> 
+wt_meta |> 
   select(model_id, contains('unc_')) |> 
   mutate(unc_n = rowSums(pick(where(is.numeric)))) |> 
   group_by(unc_n) |> 
@@ -27,7 +31,7 @@ NOAA_vars <- c('air_temperature',
                'eastward_wind',
                'northward_wind')
 
-NOAA_summary <- model_meta |> 
+NOAA_summary <- wt_meta |> 
   select(model_id, variable) 
 
 
@@ -36,7 +40,7 @@ for (i in 1:length(NOAA_vars)) {
   
   NOAA_summary <- 
     NOAA_summary |> 
-    mutate(detect_var = str_detect(model_meta$NOAA_var, detect_var)) 
+    mutate(detect_var = str_detect(wt_meta$NOAA_var, detect_var)) 
   
   colnames(NOAA_summary)[2 + i] <- detect_var
 }
@@ -52,22 +56,13 @@ NOAA_summary |>
   group_by(variable, vars_n) |> 
   summarise(n = n())
 
-# Aspects of DA
-# do the forecasts contain initial conditions?
-model_meta |> 
-  summarise(initial_cond = sum(initial_cond, na.rm = T))
-
-# do the forecast models update parameters?
-model_meta |> 
-  summarise(updates_parameters = sum(updates_parameters, na.rm = T))
-
-# is the forecast 'dynamic'?
-model_meta |> 
-  summarise(dynamic = sum(dynamic, na.rm = T))
 
 # looking at drivers by variable:
-model_meta |> 
+wt_meta |> 
   mutate(n_noaa = length(str_split_1(string = NOAA_var, pattern = ',')))
+
+wt_meta |> group_by(model_type) |> 
+  summarise(n())
 
 # summary of submissions --------------------
 scores <- arrow::open_dataset('scores')
