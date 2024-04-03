@@ -107,7 +107,6 @@ ggsave(plot = horizon_skill, 'Plots/FigureS2.png', width = 10, height = 10, unit
 
 ## Figure S3 - performance of null models
 
-
 ```{r}
 baseline_forecasts <- arrow::open_dataset("scores_2023") |>
   filter(site_id %in% lake_sites,
@@ -115,22 +114,32 @@ baseline_forecasts <- arrow::open_dataset("scores_2023") |>
   collect()
 
 
-baseline_forecasts |> 
-  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
+baseline1<-baseline_forecasts |> 
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime)),
+         site_id = factor(site_id, levels = lake_sites)) |> 
   group_by(site_id, model_id, horizon) |> 
   summarise(crps_median = median(crps, na.rm = T), .groups = 'drop') |> 
   ggplot(aes(x=horizon, y=crps_median, colour = site_id)) +
   geom_line() +
-  facet_wrap(~model_id)
+  facet_wrap(~model_id) +
+  scale_colour_brewer(palette = 'Dark2', name = 'Site') +
+  labs(y='Median CRPS (°C)', x = 'Horizon (days)') +
+  theme_bw() 
 
-baseline_forecasts |> 
+baseline2<-baseline_forecasts |> 
   mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
   group_by(site_id, model_id, reference_datetime) |> 
   summarise(crps_median = median(crps, na.rm = T), .groups = 'drop') |> 
   ggplot(aes(x = as_date(reference_datetime), y=crps_median, colour = site_id)) +
   geom_line() +
-  facet_wrap(~model_id, scale = 'free_y')
+  facet_wrap(~model_id, scale = 'free_y') +
+  scale_colour_brewer(palette = 'Dark2', name = 'Site') +
+  labs(y='Median CRPS (°C)', x = 'Forecast date') +
+  theme_bw()
 
+
+ggarrange(baseline1, baseline2, nrow = 2) |> 
+  ggsave(filename = './Plots/FigureS3.png', width = 19, height = 16, units = 'cm')
 ```
 
 ## Figure S4
@@ -201,7 +210,7 @@ B <- temperature_skill |>
   geom_hline(yintercept = 0, colour = 'grey40') + 
   geom_line()  +  
   labs(y='mean relative skill (°C)', x = 'Horizon (days)') +
-  scale_color_viridis_d(option = 'H', name  = 'Site') +
+  scale_colour_brewer(palette = 'Dark2', name = 'Site') +
   theme_bw()
 
 cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'lr', labels = 'auto') |> 
