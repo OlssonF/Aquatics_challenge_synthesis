@@ -132,7 +132,7 @@ all_chla <- chla_skill |>
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   left_join(model_meta) |> 
   mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
-         ast = ifelse(mean_crps < -100, '*', ''),
+         ast = ifelse(mean_crps < -100, '>>>', ''),
          uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
          uses_AT = as.factor(str_detect(NOAA_var, 'air_temperature')),
          mean_crps = ifelse(mean_crps < -100, -100, mean_crps)) |> 
@@ -318,7 +318,8 @@ A <- temperature_skill |>
   facet_wrap(~model_type, scales = 'free_y',nrow = 2) +
   labs(y='Site', x = 'Mean relative skill (°C)') +
   scale_colour_manual(values = cols_modeltype, name = 'Model class') +
-  theme_bw() 
+  theme_bw()  +
+  theme(legend.position = 'bottom')
   
 B <- temperature_skill |> 
   filter(model_id %in% top_mods$model_id) |> 
@@ -333,7 +334,7 @@ B <- temperature_skill |>
   scale_colour_brewer(palette = 'Dark2', name = 'Site')+
   theme_bw()
 
-cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'lr', labels = 'auto') |> 
+cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'tlbr', labels = 'auto') |> 
   ggsave(filename = './Plots/Figure5.png', width = 19, height = 16, units = 'cm')
 ```
 
