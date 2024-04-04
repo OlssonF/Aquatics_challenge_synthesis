@@ -71,10 +71,11 @@ temperature_skill <- temperature_scores |>
 
 ```{r}
 targets_ts <- targets |> 
-  filter(year(datetime) < 2023) |> 
+  filter(year(datetime) < 2023,
+         site_id %in% lake_sites) |> 
   ggplot(aes(x=datetime, y=variable, colour = variable)) +
   geom_point(show.legend = F) +
-  facet_wrap(~site_id, ncol = 5) +
+  facet_wrap(~site_id, ncol = 3) +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
 
