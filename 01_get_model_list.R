@@ -15,13 +15,14 @@ model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
 # What and when?
 forecast_dates <- as.character(seq.Date(as_date('2023-01-01'), as_date('2023-12-31'), 'day'))
 variables <- c('temperature', 'oxygen', 'chla')
-
+sites <- c('BARC', 'CRAM', 'LIRO', 'PRLA', 'PRPO', 'SUGG', 'TOOK')
 
 # build a local parquet database from which to query
 scores_s3 |>
   arrow::open_dataset() |>
   dplyr::filter(reference_datetime %in% forecast_dates,
                 variable %in% variables,
+                site_id %in% sites, 
                 model_id %in% model_meta$model_id) |>
   arrow::write_dataset("scores_2023", partitioning=c("model_id", "site_id"))
 
