@@ -56,16 +56,11 @@ NOAA_summary |>
   group_by(variable, vars_n) |> 
   summarise(n = n())
 
-
-# looking at drivers by variable:
-wt_meta |> 
-  mutate(n_noaa = length(str_split_1(string = NOAA_var, pattern = ',')))
-
 wt_meta |> group_by(model_type) |> 
   summarise(n())
 
 # summary of submissions --------------------
-scores <- arrow::open_dataset('scores')
+scores <- arrow::open_dataset('./scores_2023')
 
 distinct_submissions <- scores |> 
   distinct(model_id, site_id, variable) |> 

@@ -25,42 +25,7 @@ model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
 
 baselines <- model_meta |> 
   filter(model_id %in% c('persistenceRW', 'climatology'))
-# Open dataset-------------
-# start with lake temperatures
-temperature_scores <- arrow::open_dataset("./scores_2023") |>
-  dplyr::filter(!(model_id %in% c('flareGOTM','flareGOTM_noDA', 'flare_ler', 'flare_ler_baseline') &
-                  site_id == 'TOOK')) |> 
-  filter(site_id %in% lake_sites,
-         model_id %in% model_meta$model_id,
-         variable == 'temperature') |>
-  collect()
-
-
-# Calculate skill scores ------------
-temperature_climatology <- arrow::open_dataset("./scores_2023") |>
-  filter(model_id == 'climatology', 
-         site_id %in% lake_sites,
-         variable == 'temperature') |>
-  collect() |> 
-  select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
-  arrange(reference_datetime, datetime, site_id) |> 
-  pivot_wider(values_from = c(crps, logs),
-              names_from = model_id)
-
-temperature_skill <- temperature_scores |>
-  filter(model_id != 'climatology') |> 
-  select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
-  full_join(temperature_climatology) |> 
-  
-  # calcaulte the skill relative to climatology (- is bad, + is good)
-  mutate(skill_crps = crps_climatology - crps,
-         skill_logs = logs_climatology - logs,
-         horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
-  # consistent forecast period
-  filter(horizon <= 30,
-         horizon >= 1, 
-         horizon != 15) |> 
-  arrange(reference_datetime, site_id, datetime, model_id) 
+source('get_data.R')
 
 source('R/get_colours.R') # returns model_id_colours and cols_modeltypes
 
@@ -87,7 +52,7 @@ distinct_forecasts |>
 ```
 
 
-## Figure 1
+## Figure 2
 
 ```{r model-type, fig.width=10}
 top10_temp <- 
@@ -110,7 +75,7 @@ top10_temp <-
                    pattern_alpha = 1,
                    colour = 'black') + 
   scale_y_reordered() +
-  labs(y='Model', x = 'mean relative skill (°C)') +
+  labs(y='Model', x = 'Mean relative skill (°C)', subtitle = 'Water temperature') +
   geom_vline(xintercept = 0) +
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
@@ -128,8 +93,8 @@ all_temp <-
   mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
          uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
          uses_AT = str_detect(NOAA_var, 'air_temperature')) |> 
-  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
-
+  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +   # Different pattern for each group
+  annotate('rect', xmax = Inf, xmin = -Inf, ymin = 19.5, ymax =  Inf, fill = 'grey', alpha = 0.2) + 
   geom_bar_pattern(aes(pattern = as.factor(uses_AT)),
                    stat = "identity",
                    alpha = 0.8, 
@@ -139,23 +104,87 @@ all_temp <-
                    pattern_spacing = 0.03,
                    pattern_alpha = 1) + 
   scale_y_reordered() +
-  labs(y='Model', x = 'Mean relative skill (°C)') +
+  labs(y='Model', x = 'Mean relative skill (°C)', subtitle = 'Water temperature') +
   geom_vline(xintercept = 0) +
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses air temperature as a covariate?') +
   scale_pattern_type_manual(values=c(NA, NA), name = 'Uses air temperature as a covariate?') +
   theme_bw() + 
   guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses air temperature as a covariate?'),
-         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class'))
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class')) 
 
 ggpubr::ggarrange(top10_temp, all_temp, nrow = 1, align = 'hv',
                   common.legend = T,
                   legend = 'top', labels = 'auto') |> 
-  ggsave(filename = './Plots/Figure1.png', width = 25, height = 10, units = 'cm')
+  ggsave(filename = './Plots/Figure2.png', width = 25, height = 11, units = 'cm')
+
+
+
+all_DO <- oxygen_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  left_join(model_meta) |> 
+  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
+         uses_AT = str_detect(NOAA_var, 'air_temperature')) |> 
+  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
+  annotate('rect', xmax = Inf, xmin = -Inf, ymin = 9.5, ymax =  Inf, fill = 'grey', alpha = 0.2) + 
+  geom_bar_pattern(aes(pattern = as.factor(uses_AT)),
+                   stat = "identity",
+                   alpha = 0.8, 
+                   pattern_fill = "black",
+                   pattern_colour = "black", 
+                   pattern_spacing = 0.04,
+                   pattern_alpha = 1,
+                   colour = 'black') + 
+  scale_y_reordered() +
+  labs(y='Model', x = 'Mean relative skill (mg/L)', subtitle = 'Dissolved oxygen') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe')) +
+  scale_pattern_type_manual(values=c(NA, NA)) +
+  theme_bw() +
+  theme(legend.position = 'none')
+
+
+all_chla <- chla_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  left_join(model_meta) |> 
+  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
+         ast = ifelse(mean_crps < -100, '>>>', ''),
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
+         uses_AT = as.factor(str_detect(NOAA_var, 'air_temperature')),
+         mean_crps = ifelse(mean_crps < -100, -100, mean_crps)) |> 
+  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +
+  annotate('rect', xmax = Inf, xmin = -Inf, ymin = 19.5, ymax =  Inf, fill = 'grey', alpha = 0.2) + 
+  geom_bar_pattern(aes(pattern = uses_AT),# Different pattern for each group
+                   stat = "identity",
+                   alpha = 0.8, 
+                   colour = 'black',
+                   pattern_fill = "black",
+                   pattern_colour = "black", width = 0.8,
+                   pattern_spacing = 0.03,
+                   pattern_alpha = 1) + 
+  scale_y_reordered() +
+  labs(y='Model', x = 'Mean relative skill (ug/L)', subtitle = 'Chlorophyll a') +
+  geom_vline(xintercept = 0) +
+  scale_fill_manual(values = cols_modeltype) +
+  scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses air temperature as a covariate?') +
+  scale_pattern_type_manual(values=c(NA, NA), name = 'Uses air temperature as a covariate?') +
+  theme_bw()+
+  theme(legend.position = 'none')  +
+  coord_cartesian(xlim = c(-10, 5)) +
+  geom_text(aes(y=manuscript_name, x= 0.5, label = ast), inherit.aes = F)
+
+ggpubr::ggarrange(top10_temp, all_temp, all_DO, all_chla, nrow = 2, ncol= 2, align = 'hv',
+                  common.legend = T,
+                  legend = 'top', labels = 'auto') |> 
+  ggsave(filename = 'Plots/test.png', height = 20, width = 25, units = 'cm')
 
 ```
 
-## Figure 2
+## Figure 3
 ```{r skill-bias-sd}
 skill <- 
   temperature_skill |> 
@@ -219,10 +248,10 @@ ggpubr::ggarrange(skill,
                   bias, 
                   legend = F, align = 'hv', 
                   labels = c('a','', 'b', 'c')) |> 
-  ggsave(filename = 'Plots/Figure2.png', height = 17, width = 16, units = 'cm')
+  ggsave(filename = 'Plots/Figure3.png', height = 17, width = 16, units = 'cm')
 ```
 
-## Figure 3
+## Figure 4
 
 ```{r reliability}
 source('./R/reliability_plot.R')
@@ -234,7 +263,7 @@ good_80 <-
                    order = levels(model_id_colours$manuscript_name)) +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
   theme_bw() +
-  scale_y_continuous(limits = c(45, 100))
+  scale_y_continuous(limits = c(54, 100))
 
 good_95 <- plot_reliability(scores = temperature_scores,
                             models = top_mods, 
@@ -242,7 +271,7 @@ good_95 <- plot_reliability(scores = temperature_scores,
                             order = levels(model_id_colours$manuscript_name)) +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
   theme_bw() +
-  scale_y_continuous(limits = c(45, 100))
+  scale_y_continuous(limits = c(54, 100))
 
 # get the list of bad models
 bad_mods <- model_meta |> 
@@ -272,10 +301,10 @@ ggarrange(ggarrange(get_legend(good_80), NULL, nrow = 2),
           ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none', labels = 'auto'), 
           ncol = 2, 
           widths = c(1,5)) |> 
-  ggsave(filename = 'Plots/Figure3.png', height = 17.6, width = 23, units = 'cm')
+  ggsave(filename = 'Plots/Figure4.png', height = 17.6, width = 23, units = 'cm')
 ```
 
-## Figure 4
+## Figure 5
 ```{r model_type-site}
 n_model_type <- temperature_skill |> 
   distinct(model_id) |> 
@@ -309,7 +338,8 @@ A <- temperature_skill |>
   facet_wrap(~model_type, scales = 'free_y',nrow = 2) +
   labs(y='Site', x = 'Mean relative skill (°C)') +
   scale_colour_manual(values = cols_modeltype, name = 'Model class') +
-  theme_bw() 
+  theme_bw()  +
+  theme(legend.position = 'bottom')
   
 B <- temperature_skill |> 
   filter(model_id %in% top_mods$model_id) |> 
@@ -324,15 +354,16 @@ B <- temperature_skill |>
   scale_colour_brewer(palette = 'Dark2', name = 'Site')+
   theme_bw()
 
-cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'lr', labels = 'auto') |> 
-  ggsave(filename = './Plots/Figure4.png', width = 19, height = 16, units = 'cm')
+cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'tlbr', labels = 'auto') |> 
+  ggsave(filename = './Plots/Figure5.png', width = 19, height = 16, units = 'cm')
 ```
 
-## Figure 5
+## Figure 6
 
 ```{r target-plot}
 targets <- readr::read_csv("https://data.ecoforecast.org/neon4cast-targets/aquatics/aquatics-targets.csv.gz") |> 
-  na.omit()
+  na.omit() |> 
+  filter(year(datetime) <= 2023)
 
 layout_design <- "
   A#
@@ -353,39 +384,43 @@ targets_2023 <- targets |>
   mutate(mean_obs = ifelse(n < 18, NA, mean_obs))
 
 
-obs <- targets |> 
+obs_diff <-  
+  targets |> 
   filter(variable == 'temperature',
-         site_id %in% lake_sites,
-         year(datetime) < 2023) |> 
-  mutate(month = as.factor(month(datetime))) |> 
-  ggplot(aes(x = month, y= observation), colour = "#26172AFF") +
-  geom_boxplot() +
-  facet_manual(~factor(site_id, levels = lake_sites),
-               design = layout_design) +
-  geom_point(data = targets_2023, aes(x = month, y = mean_obs), colour = '#60CEACFF') +
-  scale_x_discrete(name = 'Month', labels = month.abb) +
-  scale_y_continuous(name = 'Water temperature (°C)') +
+         site_id %in% lake_sites) |> 
+  mutate(month = month(datetime),
+         period = ifelse(year(datetime) == 2023, 'focal', 'historic'),
+        site_id = factor(site_id, levels = lake_sites)) |> 
+  group_by(month, site_id, period) |> 
+  summarise(median_obs = median(observation, na.rm = T),
+            n = n()) |> 
+  mutate(median_obs = ifelse(n < 18, NA, median_obs)) |> 
+  pivot_wider(names_from = period, values_from = median_obs, id_cols = c(month, site_id)) |> 
+  mutate(delta = focal - historic,
+         month = as_date(paste('2023', month, '01', sep = '-'))) |> 
+  ggplot()  +
+  geom_hline(yintercept = 0) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+  annotate("rect", 
+           xmax = rep(as_date('2024-01-01'),8), 
+           xmin = rep(as_date('2022-01-01'), 8),
+           ymin = c(-Inf, -Inf, -Inf, -Inf,Inf,Inf,Inf,Inf), 
+           ymax = c(-4,-3,-2,-1,1,2,3,4), 
+           fill = 'grey', alpha = 0.15) +
+  geom_line(aes(x=month, y=delta, colour = site_id)) +
+  geom_point(aes(x=month, y=delta, colour = site_id)) +
+  scale_x_date(date_labels = "%b", breaks = '1 month') +
+  labs(y = 'Difference in median monthly water temperature (°C)', 
+       x = 'Month') +
+  coord_cartesian(xlim = c(as_date('2023-01-01'), 
+                           as_date('2023-12-01')),
+                  ylim = c(-2, 5.2),
+                  expand = T) +
+  theme(panel.grid.minor.x = element_blank()) +
+  scale_colour_brewer(palette = 'Dark2', name = 'Site')
 
-ggsave(obs, filename = 'Plots/Figure5.png', width = 10, height=13, units = 'cm')
+
+ggsave(obs_diff, filename = 'Plots/Figure6.png', width = 13, height=10, units = 'cm')
 
 ```
-
-
-```{r}
-targets |> 
-  filter(variable == 'temperature',
-         site_id %in% lake_sites, 
-         year(datetime) < 2024) |> 
-  mutate(doy = yday(datetime),
-         year = year(datetime),
-         site_id = factor(site_id, levels = lake_sites), 
-         is_2023 = ifelse(year == 2023, T, F))  |> 
-  group_by(site_id, is_2023) |> 
-  summarise(mean = mean(observation),
-            sd = sd(observation)) |> 
-  filter(site_id  == 'BARC')
-```
- 
  
