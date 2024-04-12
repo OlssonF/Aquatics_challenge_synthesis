@@ -11,7 +11,7 @@ top_mods <- temperature_skill |>
 
 
 # define the colours
-top_process <- top_mods |> filter(model_type == 'process') |> pull(model_id)
+top_process <- top_mods |> filter(model_type == 'process-based') |> pull(model_id)
 process_cols <- RColorBrewer::brewer.pal(n = 9, name = 'YlGnBu')[3:6]
 names(process_cols) <- top_process
 
@@ -40,6 +40,6 @@ model_id_colours <- enframe(c(process_cols, MME_cols, empirical_cols, ML_cols)) 
 # colours for model types 
 cols_modeltype <- c('empirical' = "#C42503FF" ,
                     'MME' = "#FDAD35FF"  ,
-                    'process' = "#23C3E4FF" ,
+                    'process-based' = "#23C3E4FF" ,
                     'ML' = "#3E378FFF",
                     'null' = '#A9A9A9')
