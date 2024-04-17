@@ -1,36 +1,27 @@
 
 # Open dataset-------------
 # Dissolved oxygen
-oxygen_scores <- arrow::open_dataset("./scores_2023") |>
-  filter(site_id %in% lake_sites,
-         model_id %in% model_meta$model_id,
-         variable == 'oxygen') |>
+oxygen_scores <- arrow::open_dataset("./scores") |>
+  filter(variable == 'oxygen') |>
   collect()
 
 
 # chlorophyll
-chla_scores <- arrow::open_dataset("./scores_2023") |>
-  filter(site_id %in% lake_sites,
-         model_id %in% model_meta$model_id,
-         variable == 'chla') |>
+chla_scores <- arrow::open_dataset("./scores") |>
+  filter(variable == 'chla') |>
   collect()
 
 
 # temperature
-temperature_scores <- arrow::open_dataset("./scores_2023") |>
-  dplyr::filter(!(model_id %in% c('flareGOTM','flareGOTM_noDA', 'flare_ler', 'flare_ler_baseline') &
-                    site_id == 'TOOK')) |> 
-  filter(site_id %in% lake_sites,
-         model_id %in% model_meta$model_id,
-         variable == 'temperature') |>
+temperature_scores <- arrow::open_dataset("./scores") |>
+  filter(variable == 'temperature') |>
   collect()
 
 
 # read in DOY scores ------------
 # temp
-temperature_climatology <- arrow::open_dataset("./scores_2023") |>
+temperature_climatology <- arrow::open_dataset("./scores") |>
   filter(model_id == 'climatology', 
-         site_id %in% lake_sites,
          variable == 'temperature') |>
   collect() |> 
   select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
@@ -39,9 +30,8 @@ temperature_climatology <- arrow::open_dataset("./scores_2023") |>
               names_from = model_id)
 
 # DO
-oxygen_climatology <- arrow::open_dataset("./scores_2023") |>
+oxygen_climatology <- arrow::open_dataset("./scores") |>
   filter(model_id == 'climatology', 
-         site_id %in% lake_sites,
          variable == 'oxygen') |>
   collect() |> 
   select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
@@ -50,9 +40,8 @@ oxygen_climatology <- arrow::open_dataset("./scores_2023") |>
               names_from = model_id)
 
 # Chorophyll
-chla_climatology <- arrow::open_dataset("./scores_2023") |>
+chla_climatology <- arrow::open_dataset("./scores") |>
   filter(model_id == 'climatology', 
-         site_id %in% lake_sites,
          variable == 'chla') |>
   collect() |> 
   select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
