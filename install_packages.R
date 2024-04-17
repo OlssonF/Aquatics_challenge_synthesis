@@ -1,0 +1,10 @@
+install.packages('tidyverse')
+install.packages('arrow')
+install.packages('here')
+install.packages('lubridate')
+
+install.packages('ggpubr')
+install.packages('cowplot')
+install.packages('tidytext')
+install.packages('ggh4x')
+install.packages('ggpattern')
