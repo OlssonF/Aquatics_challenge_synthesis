@@ -7,7 +7,7 @@ options(timeout = 1000)
 # Get from data publication on Zenodo
 save_loc <- here::here()
 
-download.file(url = "https://sandbox.zenodo.org/records/46145/files/scores_2023.zip?download=1",
+download.file(url = "https://sandbox.zenodo.org/records/46413/files/scores_archive.zip?download=1",
               destfile = file.path(save_loc,"scores.zip"))
 #If this doesn't work try adding the  method = "curl" argument
 
