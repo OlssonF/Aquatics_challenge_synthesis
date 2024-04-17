@@ -1,5 +1,5 @@
 ---
-title: "supplementary plots"
+title: "Supplementary Figures"
 output: html_document
 date: "2024-02-09"
 ---
