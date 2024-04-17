@@ -4,8 +4,19 @@ library(tidyverse)
 library(lubridate)
 `%nin%` = Negate(`%in%`)
 
-scores_s3 <- arrow::s3_bucket("neon4cast-scores/parquet/aquatics/",
-                              endpoint_override= "data.ecoforecast.org", anonymous = T)
+# Get from data publication on Zenodo
+save_loc <- here::here()
+
+download.file(url = "https://sandbox.zenodo.org/records/46145/files/scores_2023.zip?download=1",
+              destfile = file.path(save_loc,"scores.zip"), method = "curl")
+unzip(file.path(save_loc,"scores.zip"))
+
+scores_s3 <- 'scores_2023'
+
+# if using S3...
+# scores_s3 <- arrow::s3_bucket("neon4cast-scores/parquet/aquatics/",
+#                               endpoint_override= "data.ecoforecast.org", anonymous = T)
+
 
 googlesheets4::gs4_deauth()
 model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing") |> 
