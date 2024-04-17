@@ -2,6 +2,8 @@
 library(tidyverse)
 library(lubridate)
 
+options(timeout = 1000)
+
 # Get from data publication on Zenodo
 save_loc <- here::here()
 
