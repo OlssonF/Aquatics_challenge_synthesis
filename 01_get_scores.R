@@ -11,7 +11,7 @@ download.file(url = "https://sandbox.zenodo.org/records/46413/files/scores_archi
               destfile = file.path(save_loc,"scores.zip"))
 #If this doesn't work try adding the  method = "curl" argument
 
-unzip(file.path(save_loc,"scores.zip"), exdir = 'scores')
+unzip(file.path(save_loc,"scores.zip"))
 
 
 
