@@ -31,26 +31,6 @@ source('R/get_colours.R') # returns model_id_colours and cols_modeltypes
 
 ```
 
-## Summary stats
-```{r}
-# total forecasts
-distinct_forecasts <- arrow::open_dataset("./scores") |> 
-  distinct(model_id, site_id, variable, reference_datetime) |> 
-  collect()
-
-# variable forecasts
-distinct_forecasts |> 
-  group_by(variable ) |>
-  summarise(n = n()) |> 
-  mutate(percent = 100*(n/nrow(distinct_forecasts)))
-
-# lake temp forecasts
-distinct_forecasts |> 
-  filter(site_id %in% lake_sites,
-         variable == 'temperature') |> 
-  summarise(n = n()) 
-```
-
 
 ## Figure 2
 
