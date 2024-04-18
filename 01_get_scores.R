@@ -9,7 +9,7 @@ save_loc <- here::here()
 
 download.file(url = "https://sandbox.zenodo.org/records/46413/files/scores_archive.zip?download=1",
               destfile = file.path(save_loc,"scores.zip"))
-#If this doesn't work try adding the  method = "curl" argument
+#If this doesn't work try adding the method = "curl" argument
 
 unzip(file.path(save_loc,"scores.zip"))
 

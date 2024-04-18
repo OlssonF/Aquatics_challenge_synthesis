@@ -32,7 +32,7 @@ model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
 
 # Open dataset-------------
 # start with lake temperatures
-temperature_scores <- arrow::open_dataset("./scores_2023") |>
+temperature_scores <- arrow::open_dataset("./scores") |>
   dplyr::filter(!(model_id %in% c('flareGOTM','flareGOTM_noDA', 'flare_ler', 'flare_ler_baseline') &
                   site_id == 'TOOK')) |> 
   filter(site_id %in% lake_sites,
@@ -42,7 +42,7 @@ temperature_scores <- arrow::open_dataset("./scores_2023") |>
 
 
 # Calculate skill scores ------------
-temperature_climatology <- arrow::open_dataset("./scores_2023") |>
+temperature_climatology <- arrow::open_dataset("./scores") |>
   filter(model_id == 'climatology', 
          site_id %in% lake_sites,
          variable == 'temperature') |>
@@ -109,7 +109,7 @@ ggsave(plot = horizon_skill, 'Plots/FigureS2.png', width = 10, height = 10, unit
 ## Figure S3 - performance of null models
 
 ```{r}
-baseline_forecasts <- arrow::open_dataset("scores_2023") |>
+baseline_forecasts <- arrow::open_dataset("scores") |>
   filter(site_id %in% lake_sites,
          model_id %in% c('persistenceRW', 'climatology')) |>
   collect()
