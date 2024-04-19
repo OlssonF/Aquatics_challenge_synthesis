@@ -65,7 +65,11 @@ temperature_skill <- temperature_scores |>
   filter(horizon <= 30,
          horizon >= 1, 
          horizon != 15) |> 
-  arrange(reference_datetime, site_id, datetime, model_id) 
+  arrange(reference_datetime, site_id, datetime, model_id)
+
+if (!dir.exists('Plots')) {
+  dir.create('Plots')
+}
 ```
 ## Figure s1 - targets timeseries
 

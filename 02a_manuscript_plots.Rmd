@@ -29,6 +29,9 @@ source('R/get_data.R')
 
 source('R/get_colours.R') # returns model_id_colours and cols_modeltypes
 
+if (!dir.exists('Plots')) {
+  dir.create('Plots')
+}
 ```
 
 
