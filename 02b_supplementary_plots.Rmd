@@ -86,6 +86,13 @@ ggsave(plot = targets_ts, 'Plots/FigureS1.png', width = 20, height = 15, units =
 ## Figure S2 - all models, skill over horizon
 
 ```{r}
+top_mods <- temperature_skill |> 
+  group_by(model_id) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  ungroup() |> 
+  filter(mean_crps > 0) |> 
+  distinct(model_id)
+
 horizon_skill <- 
   temperature_skill |> 
   filter(!(model_id %in% c(top_mods$model_id)), 
