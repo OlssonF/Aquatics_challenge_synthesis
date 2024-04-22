@@ -63,10 +63,11 @@ top10_temp <-
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
   scale_pattern_type_manual(values=c(NA, NA)) +
-  theme_bw() + 
+  theme_bw(base_size = 10) + 
   guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
                                 title = 'Uses air temperature as a covariate?'),
-         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class'))
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class')) +
+  theme(legend.box = 'vertical')
 
 all_temp <- 
   temperature_skill |> 
@@ -92,9 +93,10 @@ all_temp <-
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses air temperature as a covariate?') +
   scale_pattern_type_manual(values=c(NA, NA), name = 'Uses air temperature as a covariate?') +
-  theme_bw() + 
+  theme_bw(base_size = 10) + 
   guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses air temperature as a covariate?'),
-         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class')) 
+         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class'))  +
+  theme(legend.box = 'vertical')
 
 
 all_DO <- oxygen_skill |> 
@@ -120,7 +122,7 @@ all_DO <- oxygen_skill |>
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
   scale_pattern_type_manual(values=c(NA, NA)) +
-  theme_bw() +
+  theme_bw(base_size = 10) + 
   theme(legend.position = 'none')
 
 
@@ -149,7 +151,7 @@ all_chla <- chla_skill |>
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses air temperature as a covariate?') +
   scale_pattern_type_manual(values=c(NA, NA), name = 'Uses air temperature as a covariate?') +
-  theme_bw()+
+  theme_bw(base_size = 10) + 
   theme(legend.position = 'none')  +
   coord_cartesian(xlim = c(-10, 5)) +
   geom_text(aes(y=manuscript_name, x= 0.75, label = ast), inherit.aes = F, )
@@ -157,7 +159,7 @@ all_chla <- chla_skill |>
 ggpubr::ggarrange(top10_temp, all_temp, all_DO, all_chla, nrow = 2, ncol= 2, align = 'hv',
                   common.legend = T,
                   legend = 'top', labels = 'auto') |> 
-  ggsave(filename = 'Plots/Figure2.png', height = 20, width = 25, units = 'cm')
+  ggsave(filename = 'Plots/Figure2.png', height = 20, width = 15.5, units = 'cm')
 
 ```
 
