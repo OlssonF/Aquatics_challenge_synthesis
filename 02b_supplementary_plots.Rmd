@@ -32,9 +32,7 @@ model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/
 
 # Open dataset-------------
 # start with lake temperatures
-temperature_scores <- arrow::open_dataset("./scores") |>
-  dplyr::filter(!(model_id %in% c('flareGOTM','flareGOTM_noDA', 'flare_ler', 'flare_ler_baseline') &
-                  site_id == 'TOOK')) |> 
+temperature_scores <- arrow::open_dataset("./scores_v2") |> 
   filter(site_id %in% lake_sites,
          model_id %in% model_meta$model_id,
          variable == 'temperature') |>
@@ -42,7 +40,7 @@ temperature_scores <- arrow::open_dataset("./scores") |>
 
 
 # Calculate skill scores ------------
-temperature_climatology <- arrow::open_dataset("./scores") |>
+temperature_climatology <- arrow::open_dataset("./scores_v2") |>
   filter(model_id == 'climatology', 
          site_id %in% lake_sites,
          variable == 'temperature') |>
@@ -81,7 +79,8 @@ targets_ts <- targets |>
   geom_point(show.legend = F) +
   facet_wrap(~site_id, ncol = 3) +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) +
+  scale_colour_viridis_d(option = 'A', begin=0.2, end=0.9)
 
 ggsave(plot = targets_ts, 'Plots/FigureS1.png', width = 20, height = 15, units = 'cm')
 ```

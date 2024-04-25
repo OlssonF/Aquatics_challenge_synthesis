@@ -21,7 +21,7 @@ lake_sites <- c('TOOK', 'PRLA','PRPO', 'CRAM', 'LIRO','BARC', 'SUGG')
 
 # read in the metadata from the google sheet
 googlesheets4::gs4_deauth()
-model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing")
+model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/16J_jBbYyMoPbJujBHnKbANXKIMCcu2UtjDHwnL5mUA0/edit?usp=sharing")
 
 baselines <- model_meta |> 
   filter(model_id %in% c('persistenceRW', 'climatology'))
@@ -65,7 +65,7 @@ top10_temp <-
   scale_pattern_type_manual(values=c(NA, NA)) +
   theme_bw(base_size = 10) + 
   guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
-                                title = 'Uses air temperature as a covariate?'),
+                                title = 'Uses air temperature\nas a covariate?'),
          fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class')) +
   theme(legend.box = 'vertical')
 
@@ -126,40 +126,13 @@ all_DO <- oxygen_skill |>
   theme(legend.position = 'none')
 
 
-all_chla <- chla_skill |> 
-  group_by(model_id) |> 
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  left_join(model_meta) |> 
-  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
-         ast = ifelse(mean_crps < -100, '>>', ''),
-         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
-         uses_AT = as.factor(str_detect(NOAA_var, 'air_temperature')),
-         mean_crps = ifelse(mean_crps < -100, -100, mean_crps)) |> 
-  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +
-  annotate('rect', xmax = Inf, xmin = -Inf, ymin = 20.5, ymax =  Inf, fill = 'grey', alpha = 0.2) + 
-  geom_bar_pattern(aes(pattern = uses_AT),# Different pattern for each group
-                   stat = "identity",
-                   alpha = 0.8, 
-                   colour = 'black',
-                   pattern_fill = "black",
-                   pattern_colour = "black", width = 0.8,
-                   pattern_spacing = 0.03,
-                   pattern_alpha = 1) + 
-  scale_y_reordered() +
-  labs(y='Model', x = 'Mean relative skill (ug/L)', subtitle = 'Chlorophyll a') +
-  geom_vline(xintercept = 0) +
-  scale_fill_manual(values = cols_modeltype) +
-  scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses air temperature as a covariate?') +
-  scale_pattern_type_manual(values=c(NA, NA), name = 'Uses air temperature as a covariate?') +
-  theme_bw(base_size = 10) + 
-  theme(legend.position = 'none')  +
-  coord_cartesian(xlim = c(-10, 5)) +
-  geom_text(aes(y=manuscript_name, x= 0.75, label = ast), inherit.aes = F, )
-
-ggpubr::ggarrange(top10_temp, all_temp, all_DO, all_chla, nrow = 2, ncol= 2, align = 'hv',
-                  common.legend = T,
-                  legend = 'top', labels = 'auto') |> 
-  ggsave(filename = 'Plots/Figure2.png', height = 20, width = 15.5, units = 'cm')
+legend <- get_legend(top10_temp)
+ggpubr::ggarrange(top10_temp, ggarrange(as_ggplot(legend), NULL, ncol = 2, widths = c(1, 3)),
+                  all_temp, all_DO, 
+                  nrow = 2, ncol= 2, 
+                  align = 'hv', heights = c(1, 1.3),
+                  legend = 'none', labels = c('a', '', 'b', 'c')) |> 
+  ggsave(filename = 'Plots/Figure2.png', height = 20, width = 17, units = 'cm')
 
 ```
 
