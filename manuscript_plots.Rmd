@@ -18,7 +18,7 @@ source('install_packages.R')
 ## Get scores
 
 ```{r}
-source('00_get_scores.R')
+source('R/get_scores.R')
 ```
  
 ## Read in the data and model metadata
