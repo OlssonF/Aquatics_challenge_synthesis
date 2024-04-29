@@ -96,7 +96,7 @@ model_meta |>
 
 # Scores database summary -------------------------------------------------
 # total forecasts - distinct model/site/var/refdate combos
-distinct_forecasts <- arrow::open_dataset("./scores_v2") |> 
+distinct_forecasts <- arrow::open_dataset("./scores") |> 
   distinct(model_id, site_id, variable, reference_datetime) |> 
   collect()
 
