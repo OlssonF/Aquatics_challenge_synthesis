@@ -13,6 +13,7 @@ library(tidytext)
 library(ggpattern)
 library(ggpubr)
 library(ggh4x)
+source('install_packages.R')
 ```
 ## Get scores
 
