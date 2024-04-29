@@ -1,19 +1,19 @@
 
 # Open dataset-------------
 # Dissolved oxygen
-oxygen_scores <- arrow::open_dataset("./scores_v2") |>
+oxygen_scores <- arrow::open_dataset("./scores") |>
   filter(variable == 'oxygen') |>
   collect()
 
 # temperature
-temperature_scores <- arrow::open_dataset("./scores_v2") |>
+temperature_scores <- arrow::open_dataset("./scores") |>
   filter(variable == 'temperature') |>
   collect()
 
 
 # read in DOY scores ------------
 # temp
-temperature_climatology <- arrow::open_dataset("./scores_v2") |>
+temperature_climatology <- arrow::open_dataset("./scores") |>
   filter(model_id == 'climatology', 
          variable == 'temperature') |>
   collect() |> 
@@ -23,7 +23,7 @@ temperature_climatology <- arrow::open_dataset("./scores_v2") |>
               names_from = model_id)
 
 # DO
-oxygen_climatology <- arrow::open_dataset("./scores_v2") |>
+oxygen_climatology <- arrow::open_dataset("./scores") |>
   filter(model_id == 'climatology', 
          variable == 'oxygen') |>
   collect() |> 
