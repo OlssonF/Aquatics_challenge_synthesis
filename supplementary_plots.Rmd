@@ -17,7 +17,7 @@ library(ggh4x)
 
 ## Read in the data and model metadata
 ```{r read-in-data}
-targets <- readr::read_csv("https://data.ecoforecast.org/neon4cast-targets/aquatics/aquatics-targets.csv.gz") |> 
+targets <- readr::read_csv("targets/targets_2016-2023.csv") |> 
   na.omit() 
 
 lake_sites <- c('TOOK', 'PRLA','PRPO', 'CRAM', 'LIRO','BARC', 'SUGG')
@@ -26,9 +26,8 @@ cols_modeltype <- c('empirical' = "#482576FF",
                     'process' = "#21908CFF",
                     'ML' = '#BBDF27FF',
                     'null' = '#A9A9A9')
-# read in the metadata from the google sheet
-googlesheets4::gs4_deauth()
-model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/1oC7_w63wSCXNiHs1IK8AFGr0MG-NdjDAjwkfjvRZW-I/edit?usp=sharing")
+# read in the metadata 
+model_meta <- read_csv("https://zenodo.org/records/11087208/files/Model_descriptions.csv?download=1", na = 'character')
 
 # Open dataset-------------
 # start with lake temperatures

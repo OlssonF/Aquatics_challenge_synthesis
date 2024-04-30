@@ -13,12 +13,15 @@ library(tidytext)
 library(ggpattern)
 library(ggpubr)
 library(ggh4x)
-source('install_packages.R')
+# source('install_packages.R')
 ```
+
 ## Get scores
 
 ```{r}
-source('R/get_scores.R')
+if (!dir.exists('scores')) {
+   source('R/get_scores.R')
+}
 ```
  
 ## Read in the data and model metadata
@@ -26,12 +29,11 @@ source('R/get_scores.R')
 lake_sites <- c('TOOK', 'PRLA','PRPO', 'CRAM', 'LIRO','BARC', 'SUGG')
 
 # read in the metadata from the google sheet
-googlesheets4::gs4_deauth()
-model_meta <- googlesheets4::read_sheet("https://docs.google.com/spreadsheets/d/16J_jBbYyMoPbJujBHnKbANXKIMCcu2UtjDHwnL5mUA0/edit?usp=sharing")
+model_meta <- read_csv("https://zenodo.org/records/11087208/files/Model_descriptions.csv?download=1", na = 'character')
 
 baselines <- model_meta |> 
   filter(model_id %in% c('persistenceRW', 'climatology'))
-source('R/get_data.R')
+source('R/load_data.R')
 
 source('R/get_colours.R') # returns model_id_colours and cols_modeltypes
 
@@ -113,32 +115,32 @@ distinct_forecasts |>
 
 ```{r model-type, fig.width=10}
 top10_temp <- 
-  temperature_skill |> 
-  group_by(model_id) |> 
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  temperature_skill |>
+  group_by(model_id) |>
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |>
   ungroup() |>
   filter(mean_crps > 0) |>
-  left_join(model_meta) |> 
+  left_join(model_meta) |>
   mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
-         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
-         uses_AT = str_detect(NOAA_var, 'air_temperature')) |> 
+         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'),
+         uses_AT = str_detect(NOAA_var, 'air_temperature')) |>
   ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
   geom_bar_pattern(aes(pattern = as.factor(uses_AT)),
                    stat = "identity",
-                   alpha = 0.8, 
+                   alpha = 0.8,
                    pattern_fill = "black",
-                   pattern_colour = "black", 
+                   pattern_colour = "black",
                    pattern_spacing = 0.04,
                    pattern_alpha = 1,
-                   colour = 'black') + 
+                   colour = 'black') +
   scale_y_reordered() +
   labs(y='Model', x = 'Mean relative skill (°C)', subtitle = 'Water temperature') +
   geom_vline(xintercept = 0) +
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
   scale_pattern_type_manual(values=c(NA, NA)) +
-  theme_bw(base_size = 10) + 
-  guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02), 
+  theme_bw(base_size = 10) +
+  guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02),
                                 title = 'Uses air temperature\nas a covariate?'),
          fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class')) +
   theme(legend.box = 'vertical')
@@ -387,7 +389,7 @@ cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 
 ## Figure 6
 
 ```{r target-plot}
-targets <- readr::read_csv("https://data.ecoforecast.org/neon4cast-targets/aquatics/aquatics-targets.csv.gz") |> 
+targets <- readr::read_csv("targets/targets_2016-2023.csv") |> 
   na.omit() |> 
   filter(year(datetime) <= 2023)
 
