@@ -32,10 +32,11 @@ names(ML_cols) <- top_ML
 # make into a dataframe
 model_id_colours <- enframe(c(process_cols, MME_cols, empirical_cols, ML_cols)) |> 
   full_join(top_mods, by = join_by(name == model_id)) |> 
-  mutate(value = ifelse(is.na(value), 'grey20', value),
+  mutate(value = ifelse(is.na(value), '#A9A9A9', value),
          mean_crps = ifelse(is.na(mean_crps), 0, mean_crps),
          manuscript_name = fct_reorder(manuscript_name, mean_crps, .desc = T)) |> 
-  arrange(desc(mean_crps))
+  arrange(desc(mean_crps)) %>% 
+  mutate(linetype = ifelse(name == 'climatology', 'dotdash', 'solid'))
 
 # colours for model types 
 cols_modeltype <- c('empirical' = "#C42503FF" ,

@@ -1,4 +1,4 @@
-plot_reliability <- function(scores, models, CI, order = levels(models)) {
+plot_reliability <- function(scores, models, CI, order = levels(models), alpha = 0.8) {
   
   if (CI == 95) {
     plot <- scores |> 
@@ -14,9 +14,9 @@ plot_reliability <- function(scores, models, CI, order = levels(models)) {
       pivot_wider(names_from = is_in, names_prefix = 'within_', values_from = n, values_fill = 0) |> 
       mutate(perc = within_TRUE/(within_FALSE + within_TRUE)*100, 
              manuscript_name = factor(manuscript_name, levels = order)) |> 
-      ggplot(aes(x=horizon, y=perc, colour = manuscript_name)) +
-      geom_hline(yintercept = 95, colour = 'grey3', linetype = 'dashed')+
-      geom_line(alpha = 0.8) +
+      ggplot(aes(x=horizon, y=perc, colour = manuscript_name, linetype = manuscript_name)) +
+      geom_hline(yintercept = 95, colour = 'grey3', linetype = 'dashed', linewidth = 0.8)+
+      geom_line(linewidth = 0.8, alpha = alpha) +
       labs(y = 'Percentage of observations within\n95% confidence intervals', x='Horizon (days)')  +
       annotate('text', x = 30, y = 100, label = 'underconfident', size = 5, hjust = 1) +
       annotate('text', x = 30, y = 75, label = 'overconfident', size = 5, hjust = 1)
@@ -35,9 +35,9 @@ plot_reliability <- function(scores, models, CI, order = levels(models)) {
       pivot_wider(names_from = is_in, names_prefix = 'within_', values_from = n, values_fill = 0) |> 
       mutate(perc = within_TRUE/(within_FALSE + within_TRUE)*100, 
              manuscript_name = factor(manuscript_name, levels = order)) |> 
-      ggplot(aes(x=horizon, y=perc, colour = manuscript_name)) +
-      geom_hline(yintercept = 80, colour = 'grey3', linetype = 'dashed')+
-      geom_line(alpha = 0.8) +
+      ggplot(aes(x=horizon, y=perc, colour = manuscript_name, linetype = manuscript_name)) +
+      geom_hline(yintercept = 80, colour = 'grey3', linetype = 'dashed', linewidth = 0.8)+
+      geom_line(linewidth = 0.8, alpha = alpha) +
       labs(y = 'Percentage of observations within\n80% confidence intervals', x='Horizon (days)') +
       annotate('text', x = 30, y = 100, label = 'underconfident', size = 5, hjust = 1) +
       annotate('text', x = 30, y = 75, label = 'overconfident', size = 5, hjust = 1)
