@@ -20,10 +20,10 @@ library(ggh4x)
 
 ```{r}
 if (!dir.exists('scores')) {
-   source('R/get_scores.R')
+  source('R/get_scores.R')
 }
 ```
- 
+
 ## Read in the data and model metadata
 ```{r read-in-data}
 lake_sites <- c('TOOK', 'PRLA','PRPO', 'CRAM', 'LIRO','BARC', 'SUGG')
@@ -227,12 +227,12 @@ skill <-
   ggplot(aes(x=horizon, 
              y = mean_crps, colour = manuscript_name)) +
   geom_hline(yintercept = 0, colour = 'grey40' ) + 
-  geom_line()  +  
+  geom_line(linewidth = 0.8)  +  
   labs(y='Mean relative skill (°C)', x = 'Horizon (days)') +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
   theme_bw()
 
- 
+
 
 sd <- temperature_scores |> 
   mutate(horizon = as_date(datetime) - as_date(reference_datetime)) |> 
@@ -246,7 +246,7 @@ sd <- temperature_scores |>
   mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name))) |> 
   ggplot(aes(x=horizon, 
              y = mean_sd, colour = manuscript_name)) +
-  geom_line()+
+  geom_line(linewidth = 0.8)+
   labs(y='Mean standard deviation (°C)', x = 'Horizon (days)') +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
   theme_bw()
@@ -264,7 +264,7 @@ bias <- temperature_scores |>
   mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name))) |> 
   ggplot(aes(x=horizon, 
              y = mean_abs_bias, colour = manuscript_name)) +
-  geom_line()+
+  geom_line(linewidth = 0.8)+
   labs(y='Mean absolute bias (°C)', x = 'Horizon (days)') +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
   theme_bw() +
@@ -289,15 +289,19 @@ good_80 <-
                    models = top_mods, # model_ids and manuscript names
                    CI = 80, 
                    order = levels(model_id_colours$manuscript_name)) +
-  scale_colour_manual(name = 'Model',values = model_id_colours$value) +
+  scale_colour_manual(name = 'Top model',values = model_id_colours$value) +
+  scale_linetype_manual(name = 'Top model',values = model_id_colours$linetype) +
   theme_bw() +
-  scale_y_continuous(limits = c(54, 100))
+  scale_y_continuous(limits = c(54, 100)) +
+  labs(title = 'Top performing models') +
+  theme(title = element_text(size = 14))
 
 good_95 <- plot_reliability(scores = temperature_scores,
                             models = top_mods, 
                             CI = 95, 
                             order = levels(model_id_colours$manuscript_name)) +
-  scale_colour_manual(name = 'Model',values = model_id_colours$value) +
+  scale_colour_manual(name = 'Top model',values = model_id_colours$value) +
+  scale_linetype_manual(name = 'Top model',values = model_id_colours$linetype) +
   theme_bw() +
   scale_y_continuous(limits = c(54, 100))
 
@@ -308,27 +312,31 @@ bad_mods <- model_meta |>
 
 bad_80 <- 
   plot_reliability(scores = temperature_scores,
-                 models = bad_mods, 
-                 CI = 80, 
-                 order = bad_mods$manuscript_name) +
-    theme_bw() +
-    scale_colour_manual(name = '', values = rep('grey50', 20)) +
-    scale_y_continuous(limits = c(0, 100)) + 
-    theme(legend.position = 'none')
+                   models = bad_mods, 
+                   CI = 80, 
+                   order = bad_mods$manuscript_name,
+                   alpha  = 0.6) +
+  theme_bw()  +
+  scale_colour_manual(name = '', values = unname(pals::cols25(n= 20)))+ 
+  scale_linetype_manual(name = '', values = rep('solid', 20)) +
+  theme(legend.position = 'none') +
+  labs(title = 'All other submitted models') +
+  theme(title = element_text(size = 14))
 
 bad_95 <- plot_reliability(scores = temperature_scores,
-                            models = bad_mods, 
-                            CI = 95, 
-                            order = bad_mods$manuscript_name) +
+                           models = bad_mods, 
+                           CI = 95, 
+                           order = bad_mods$manuscript_name,
+                           alpha  =0.6) +
   theme_bw() +
-  scale_y_continuous(limits = c(0, 100))  +
-  scale_colour_manual(name = '', values = rep('grey50', 20))
+  scale_y_continuous(limits = c(0, 100))   +
+  scale_colour_manual(name = '', values = unname(pals::cols25(n= 20))) + 
+  scale_linetype_manual(name = '', values = rep('solid', 20)) 
 
-
-ggarrange(ggarrange(get_legend(good_80), NULL, nrow = 2),
-          ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none', labels = 'auto'), 
-          ncol = 2, 
-          widths = c(1,5)) |> 
+ggarrange(NULL, ggarrange(get_legend(good_80), NULL, nrow = 2),
+          ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none', labels = 'auto', hjust = -4, vjust = 3), 
+          ncol = 3, 
+          widths = c(0.1,1,5)) |> 
   ggsave(filename = 'Plots/Figure4.png', height = 17.6, width = 23, units = 'cm')
 ```
 
@@ -368,16 +376,25 @@ A <- temperature_skill |>
   scale_colour_manual(values = cols_modeltype, name = 'Model class') +
   theme_bw()  +
   theme(legend.position = 'bottom')
-  
+
+
+lake_order <- temperature_skill |> 
+  filter(model_id %in% top_mods$model_id) |> 
+  group_by(site_id, horizon) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) %>% 
+  filter(horizon == 30) %>% 
+  arrange(desc(mean_crps)) %>% 
+  pull(site_id)
+
 B <- temperature_skill |> 
   filter(model_id %in% top_mods$model_id) |> 
   group_by(site_id, horizon) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  mutate(site_id = factor(site_id, levels = lake_sites)) |> 
+  mutate(site_id = factor(site_id, levels = lake_order)) |> 
   ggplot(aes(x=horizon, 
              y = mean_crps, colour = site_id)) +
   geom_hline(yintercept = 0, colour = 'grey40') + 
-  geom_line()  +  
+  geom_line(linewidth = 0.8)  +  
   labs(y='Mean relative skill (°C)', x = 'Horizon (days)') +
   scale_colour_brewer(palette = 'Dark2', name = 'Site')+
   theme_bw()
@@ -418,7 +435,7 @@ obs_diff <-
          site_id %in% lake_sites) |> 
   mutate(month = month(datetime),
          period = ifelse(year(datetime) == 2023, 'focal', 'historic'),
-        site_id = factor(site_id, levels = lake_sites)) |> 
+         site_id = factor(site_id, levels = lake_sites)) |> 
   group_by(month, site_id, period) |> 
   summarise(median_obs = median(observation, na.rm = T),
             n = n()) |> 
@@ -451,4 +468,3 @@ obs_diff <-
 ggsave(obs_diff, filename = 'Plots/Figure6.png', width = 13, height=10, units = 'cm')
 
 ```
- 
