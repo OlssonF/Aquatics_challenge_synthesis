@@ -41,8 +41,8 @@ temperature_skill <- temperature_scores |>
   full_join(temperature_climatology) |> 
   
   # calcaulte the skill relative to climatology (- is bad, + is good)
-  mutate(skill_crps = crps_climatology - crps,
-         skill_logs = logs_climatology - logs,
+  mutate(skill_crps = crps - crps_climatology,
+         skill_logs = logs - logs_climatology,
          horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
   # consistent forecast period
   filter(horizon <= 30,
@@ -57,8 +57,8 @@ oxygen_skill <- oxygen_scores |>
   full_join(oxygen_climatology) |> 
   
   # calcaulte the skill relative to climatology (- is bad, + is good)
-  mutate(skill_crps = crps_climatology - crps,
-         skill_logs = logs_climatology - logs,
+  mutate(skill_crps = crps - crps_climatology,
+         skill_logs = logs - logs_climatology,
          horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
   # consistent forecast period
   filter(horizon <= 30,
