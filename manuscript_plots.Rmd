@@ -347,7 +347,7 @@ n_model_type <- temperature_skill |>
   left_join(model_meta) |>
   group_by(model_type) |> 
   summarise(n = n())  |> 
-  mutate(site_id = 'TOOK', mean_skill = -3.25) |> 
+  mutate(site_id = 'TOOK', mean_skill = 3.25) |> 
   filter(model_type != 'null')
 
 

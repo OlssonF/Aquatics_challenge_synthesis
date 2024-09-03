@@ -161,7 +161,7 @@ top_mods <- temperature_skill |>
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   ungroup() |> 
-  filter(mean_crps > 0) |> 
+  filter(mean_crps < 0) |> 
   distinct(model_id)
 
 horizon_skill <- 
@@ -230,7 +230,7 @@ n_model_type <- temperature_skill |>
   left_join(model_meta) |>
   group_by(model_type) |> 
   summarise(n = n())  |> 
-  mutate(site_id = 'TOOK', mean_skill = -3.25) |> 
+  mutate(site_id = 'TOOK', mean_skill = 3.25) |> 
   filter(model_type != 'null')
 
 
@@ -239,7 +239,7 @@ top_mods <- temperature_skill |>
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   ungroup() |> 
-  slice_max(mean_crps, n = 10, na_rm = T) |> 
+  filter(mean_crps < 0) |> 
   distinct(model_id)
 
 # what duration have the same dates, including TOOK
@@ -261,29 +261,39 @@ date_same_B <- temperature_skill |>
   summarise(first_date = max(first_date),
             last_date = min(last_date))
 
-A <- temperature_skill |> 
+A <- temperature_skill |>
   left_join(model_meta, by = 'model_id') |>
-  filter(model_type != 'null', 
-         between(datetime, date_same_B$first_date, date_same_B$last_date)) |> 
-  group_by(model_type, model_id, site_id) |> 
-  summarise(mean_skill = mean(skill_crps, na.rm = T)) |>  
-  ggplot(aes(x = mean_skill, 
-             y = site_id, 
+  filter(model_type != 'null',
+         between(datetime, date_same_B$first_date, date_same_B$last_date)) |>
+  group_by(model_type, model_id, site_id) |>
+  summarise(mean_skill = mean(skill_crps, na.rm = T)) |>
+  ggplot(aes(x = mean_skill,
+             y = site_id,
              colour = model_type)) +
   geom_vline(xintercept = 0, linetype = 'solid') +
-  geom_label(data = n_model_type, aes(label = paste0('n = ', n)))+ 
+  geom_text(data = n_model_type, aes(label = paste0('n = ', n)))+
   geom_boxplot() +
   facet_wrap(~model_type, scales = 'free_y',nrow = 2) +
   labs(y='Site', x = 'mean relative skill (°C)') +
-  scale_colour_manual(values = cols_modeltype, name = 'Model Type') +
-  theme_bw() 
-  
+  scale_colour_manual(values = cols_modeltype, name = 'Model class') +
+  theme_bw()
+
+
+lake_order <- temperature_skill |> 
+  filter(model_id %in% top_mods$model_id) |> 
+  group_by(site_id, horizon) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) %>% 
+  filter(horizon == 30) %>% 
+  arrange(desc(mean_crps)) %>% 
+  pull(site_id)
+
+
 B <- temperature_skill |> 
   filter(model_id %in% top_mods$model_id, 
          between(datetime, date_same_B$first_date, date_same_B$last_date)) |> 
   group_by(site_id, horizon) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  mutate(site_id = factor(site_id, levels = lake_sites)) |> 
+  mutate(site_id = factor(site_id, levels = lake_order)) |> 
   ggplot(aes(x=horizon, 
              y = mean_crps, colour = site_id)) +
   geom_hline(yintercept = 0, colour = 'grey40') + 
@@ -300,7 +310,7 @@ skill_summary_RW <- temperature_skill_RW |>
   group_by(model_id) |>
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |>
   ungroup() |>
-  filter(mean_crps > 0) |>
+  filter(mean_crps < 0) |>
   left_join(model_meta) |>
   mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
          uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'),
@@ -366,7 +376,7 @@ null_scores <- temperature_scores |> mutate(horizon = as.numeric(as_date(datetim
   geom_line() + 
   scale_x_continuous(breaks = seq(2,30, 2)) + 
   theme_bw() + 
-  labs(x= 'Horizon (days)', y = 'Mean CRPS (degrees C)') + 
+  labs(x= 'Horizon (days)', y = 'Mean CRPS (°C)') + 
   scale_colour_viridis_d(name = 'Null Model', begin = 0.2, end=0.9) +
   theme(panel.grid.minor = element_blank())
 
@@ -398,9 +408,9 @@ temp_skill_clim_summary <- temperature_skill |>
 
 null_model_beats <- full_join(temp_skill_clim_summary, temp_skill_RW_summary, 
           by = join_by(model_id, horizon, manuscript_name)) %>% 
-  mutate(beats = ifelse(mean_crpsDOY > 0 & mean_crpsRW > 0, 'both',
-                        ifelse(mean_crpsDOY < 0 & mean_crpsRW > 0, 'RW',
-                               ifelse(mean_crpsDOY > 0 & mean_crpsRW < 0, 'DOY', 'none')))) %>% 
+  mutate(beats = ifelse(mean_crpsDOY < 0 & mean_crpsRW < 0, 'both',
+                        ifelse(mean_crpsDOY > 0 & mean_crpsRW < 0, 'RW',
+                               ifelse(mean_crpsDOY < 0 & mean_crpsRW > 0, 'DOY', 'none')))) %>% 
   mutate(beats = factor(beats, levels = c("none", "RW", "DOY", "both"), labels = c("Neither", "Persistence", "Day-of-year", "Both"))) %>% 
   na.omit() %>% 
   ggplot(aes(x=horizon, y=manuscript_name, shape = beats, colour = beats)) + 
