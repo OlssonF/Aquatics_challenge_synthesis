@@ -119,9 +119,9 @@ top10_temp <-
   group_by(model_id) |>
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |>
   ungroup() |>
-  filter(mean_crps > 0) |>
+  filter(mean_crps < 0) |>
   left_join(model_meta) |>
-  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
+  mutate(manuscript_name = fct_reorder(manuscript_name, desc(mean_crps)),
          uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'),
          uses_AT = str_detect(NOAA_var, 'air_temperature')) |>
   ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
@@ -150,7 +150,7 @@ all_temp <-
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   left_join(model_meta) |> 
-  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
+  mutate(manuscript_name = fct_reorder(manuscript_name, desc(mean_crps)),
          uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
          uses_AT = str_detect(NOAA_var, 'air_temperature')) |> 
   ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +   # Different pattern for each group
@@ -179,7 +179,7 @@ all_DO <- oxygen_skill |>
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   left_join(model_meta) |> 
-  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
+  mutate(manuscript_name = fct_reorder(manuscript_name, desc(mean_crps)),
          uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'), 
          uses_AT = str_detect(NOAA_var, 'air_temperature')) |> 
   ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
@@ -356,7 +356,7 @@ top_mods <- temperature_skill |>
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   ungroup() |> 
-  filter(mean_crps > 0) |> 
+  filter(mean_crps < 0) |> 
   distinct(model_id)
 
 

@@ -3,7 +3,7 @@ top_mods <- temperature_skill |>
   group_by(model_id) |> 
   summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
   ungroup() |> 
-  filter(mean_crps > 0) |> 
+  filter(mean_crps < 0) |> 
   left_join(select(model_meta, model_id, manuscript_name, model_type)) |> 
   arrange(model_type) |> 
   # also include the baseline models
@@ -34,8 +34,8 @@ model_id_colours <- enframe(c(process_cols, MME_cols, empirical_cols, ML_cols)) 
   full_join(top_mods, by = join_by(name == model_id)) |> 
   mutate(value = ifelse(is.na(value), '#A9A9A9', value),
          mean_crps = ifelse(is.na(mean_crps), 0, mean_crps),
-         manuscript_name = fct_reorder(manuscript_name, mean_crps, .desc = T)) |> 
-  arrange(desc(mean_crps)) %>% 
+         manuscript_name = fct_reorder(manuscript_name, desc(mean_crps), .desc = T)) |> 
+  arrange(mean_crps) %>% 
   mutate(linetype = ifelse(name == 'climatology', 'dotdash', 'solid'))
 
 # colours for model types 
