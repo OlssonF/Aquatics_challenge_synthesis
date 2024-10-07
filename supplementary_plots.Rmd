@@ -61,7 +61,7 @@ temperature_skill <- temperature_scores |>
   select(reference_datetime, datetime, crps, logs, site_id, model_id) |> 
   full_join(temperature_climatology) |> 
   
-  # calcaulte the skill relative to climatology (- is bad, + is good)
+  # calcaulte the skill relative to climatology (+ is bad, - is good)
   mutate(skill_crps = crps - crps_climatology,
          skill_logs = logs - logs_climatology,
          horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
@@ -153,8 +153,50 @@ targets_ts <- targets |>
 ggsave(plot = targets_ts, 'Plots/FigureS1.png', width = 20, height = 15, units = 'cm')
 ```
 
+## Figure S2 - baseline performance
+```{r}
+null_scores_T <- temperature_scores |>
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) %>% 
+  filter(model_id %in% baselines$model_id, 
+         horizon > 0, 
+         horizon != 15,
+         horizon <=30) |> 
+  group_by(model_id, horizon) |> 
+  summarise(mean_crps = mean(crps, na.rm = T)) %>% 
+  mutate(model_id = factor(model_id, levels = c('climatology', 'persistenceRW'), 
+                           labels = c("day-of-year", "persistence"))) %>% 
+  ggplot(aes(x=horizon,y = mean_crps, colour = model_id)) + 
+  geom_line() + 
+  scale_x_continuous(breaks = seq(2,30, 2)) + 
+  theme_bw() + 
+  labs(x= 'Horizon (days)', y = 'Mean CRPS (°C)', title = 'Water temperature') + 
+  scale_colour_viridis_d(name = 'Null Model', begin = 0.2, end=0.9) +
+  theme(panel.grid.minor = element_blank())
 
-## Figure S2 - all models, skill over horizon
+null_scores_DO <- oxygen_scores |>
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) %>% 
+  filter(model_id %in% baselines$model_id, 
+         horizon > 0, 
+         horizon != 15,
+         horizon <=30) |> 
+  group_by(model_id, horizon) |> 
+  summarise(mean_crps = mean(crps, na.rm = T)) %>% 
+  mutate(model_id = factor(model_id, levels = c('climatology', 'persistenceRW'), 
+                           labels = c("day-of-year", "persistence"))) %>% 
+  ggplot(aes(x=horizon,y = mean_crps, colour = model_id)) + 
+  geom_line() + 
+  scale_x_continuous(breaks = seq(2,30, 2)) + 
+  theme_bw() + 
+  labs(x= 'Horizon (days)', y = 'Mean CRPS (mg/L)', title = 'Dissolved oxygen') + 
+  scale_colour_viridis_d(name = 'Null Model', begin = 0.2, end=0.9) +
+  theme(panel.grid.minor = element_blank())
+
+
+ggarrange(null_scores_T, null_scores_DO, common.legend = T) %>% 
+  ggsave(filename = 'Plots/FigureS2.png', height = 10, width = 18, units = 'cm')
+```
+
+## Figure S3 - bad models, skill over horizon
 
 ```{r}
 top_mods <- temperature_skill |> 
@@ -175,55 +217,120 @@ horizon_skill <-
   left_join(select(model_meta, model_id, manuscript_name)) |> 
   # mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name))) |> 
   ggplot(aes(x=horizon, 
-             y = mean_crps, colour = manuscript_name, linetype = manuscript_name)) +
+             y = mean_crps, colour = manuscript_name)) +
   geom_hline(yintercept = 0, colour = 'grey40' ) + 
-  geom_line(show.legend = F)  +  
+  geom_line()  +  
   labs(y='Mean relative skill (°C)', x = 'Horizon (days)') +
+  scale_colour_manual(name = '', values = unname(pals::cols25(n= 20))) + 
+  theme_bw() +
+  theme(legend.position = 'none')
+
+ggsave(plot = horizon_skill, 'Plots/FigureS3.png', width = 15, height = 15, units = 'cm')
+```
+## Figure S4 - skill vs persistence over horizon
+```{r}
+skill_horizon_RW <- temperature_skill_RW |> 
+  filter(model_id %in% c(top_mods$model_id) & model_id != 'climatology', 
+         horizon > 0, 
+         horizon != 15,
+         horizon <=30) |> 
+  group_by(model_id, horizon) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
+  left_join(select(model_meta, model_id, manuscript_name)) |> 
+  mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name))) |> 
+  ggplot(aes(x=horizon, 
+             y = mean_crps, colour = manuscript_name)) +
+  geom_hline(yintercept = 0, colour = 'grey40' ) + 
+  geom_line(linewidth = 0.8)  +  
+  labs(y='Mean relative skill (°C)', x = 'Horizon (days)') +
+  scale_colour_manual(name = 'Model',values = model_id_colours$value) +
   theme_bw()
 
-ggsave(plot = horizon_skill, 'Plots/FigureS2.png', width = 10, height = 10, units = 'cm')
+ggsave(skill_horizon_RW, filename = 'Plots/FigureS4.png', height = 10, width = 13, units = 'cm')
 ```
 
-## Figure S3 - performance of null models
+## Figure S5 - summary of performance vs baselines
 
 ```{r}
-baseline_forecasts <- arrow::open_dataset("scores") |>
-  filter(site_id %in% lake_sites,
-         model_id %in% c('persistenceRW', 'climatology')) |>
-  collect()
+
+temp_skill_RW_summary <- temperature_skill_RW |> 
+  filter(model_id %in% c(top_mods$model_id) & model_id != 'climatology', 
+         horizon > 0, 
+         horizon != 15,
+         horizon <=30) |> 
+  group_by(model_id, horizon) |> 
+  summarise(mean_crpsRW = mean(skill_crps, na.rm = T)) |> 
+  left_join(select(model_meta, model_id, manuscript_name)) |> 
+  mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name)))
+
+temp_skill_clim_summary <- temperature_skill |> 
+  filter(model_id %in% c(top_mods$model_id) & model_id != 'persistence', 
+         horizon > 0, 
+         horizon != 15,
+         horizon <=30) |> 
+  group_by(model_id, horizon) |> 
+  summarise(mean_crpsDOY = mean(skill_crps, na.rm = T)) |> 
+  left_join(select(model_meta, model_id, manuscript_name)) |> 
+  mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name)))
 
 
-baseline1<-baseline_forecasts |> 
-  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime)),
-         site_id = factor(site_id, levels = lake_sites)) |> 
-  group_by(site_id, model_id, horizon) |> 
-  summarise(crps_median = median(crps, na.rm = T), .groups = 'drop') |> 
-  ggplot(aes(x=horizon, y=crps_median, colour = site_id)) +
-  geom_line() +
-  facet_wrap(~model_id) +
-  scale_colour_brewer(palette = 'Dark2', name = 'Site') +
-  labs(y='Median CRPS (°C)', x = 'Horizon (days)') +
-  theme_bw() 
+null_model_beats <- full_join(temp_skill_clim_summary, temp_skill_RW_summary, 
+          by = join_by(model_id, horizon, manuscript_name)) %>% 
+  mutate(beats = ifelse(mean_crpsDOY < 0 & mean_crpsRW < 0, 'both',
+                        ifelse(mean_crpsDOY > 0 & mean_crpsRW < 0, 'RW',
+                               ifelse(mean_crpsDOY < 0 & mean_crpsRW > 0, 'DOY', 'none')))) %>% 
+  mutate(beats = factor(beats, levels = c("none", "RW", "DOY", "both"), labels = c("Neither", "Persistence", "Day-of-year", "Both"))) %>% 
+  na.omit() %>% 
+  ggplot(aes(x=horizon, y=manuscript_name, shape = beats, colour = beats)) + 
+  geom_point(size = 5) +
+  scale_shape_manual(values = c(0, 1, 4, 13), name = 'Null model that is out-performed') +
+  scale_colour_manual(values = c("grey90", "#455BCDFF", "#E1DD37FF", "#46F884FF"), name = 'Null model that is out-performed') +
+  scale_y_discrete(name = 'Model') +
+  scale_x_continuous(name = 'Horizon (days)', breaks = c(1,10, 20, 30), expand = c(0.02,0)) +
+  geom_hline(yintercept = seq(.5, 9.5, 1), linewidth = .2) +
+  theme(legend.position = "bottom", 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        axis.ticks.y = element_blank())
 
-baseline2<-baseline_forecasts |> 
-  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) |> 
-  group_by(site_id, model_id, reference_datetime) |> 
-  summarise(crps_median = median(crps, na.rm = T), .groups = 'drop') |> 
-  ggplot(aes(x = as_date(reference_datetime), y=crps_median, colour = site_id)) +
-  geom_line() +
-  facet_wrap(~model_id, scale = 'free_y') +
-  scale_colour_brewer(palette = 'Dark2', name = 'Site') +
-  labs(y='Median CRPS (°C)', x = 'Forecast date') +
-  theme_bw()
+ggsave(null_model_beats, filename = 'Plots/FigureS5.png', height = 10, width = 18, units = 'cm')
 
-
-ggarrange(baseline1, baseline2, nrow = 2) |> 
-  ggsave(filename = './Plots/FigureS3.png', width = 19, height = 16, units = 'cm')
 ```
 
-## Figure S4
+## Figure S6 - performance of DOY models over horizon/time
 
-Plotting only dates where all sites are evaluated shows the same pattern as when all dates are considered. 
+```{r}
+lake_order <- temperature_skill |> 
+  filter(model_id %in% top_mods$model_id) |> 
+  group_by(site_id, horizon) |> 
+  summarise(mean_crps = mean(skill_crps, na.rm = T)) %>% 
+  filter(horizon == 30) %>% 
+  arrange(desc(mean_crps)) %>% 
+  pull(site_id)
+
+baselines<- temperature_climatology |>
+  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) %>% 
+  filter(horizon > 0, 
+         horizon != 15,
+         horizon <=30) |> 
+  group_by(horizon, site_id) |> 
+  summarise(median_crps = median(crps_climatology, na.rm = T)) %>% 
+  mutate(site_id = factor(site_id, levels = lake_order)) |>
+  ggplot(aes(x=horizon,y = median_crps, colour = site_id)) + 
+  geom_line() + 
+  scale_x_continuous(breaks = seq(2,30, 2)) + 
+  theme_bw() + 
+  labs(x= 'Horizon (days)', y = 'Median CRPS (°C)') + 
+  scale_colour_brewer(palette = 'Dark2', name = 'Site') +
+  theme(panel.grid.minor = element_blank())
+
+ggsave(baselines, filename = './Plots/FigureS6.png', width = 10, height = 10, units = 'cm')
+```
+
+## Figure S7 - Plotting only dates where all sites are evaluated shows the same pattern as when all dates are considered. 
 ```{r overlapping-periods}
 n_model_type <- temperature_skill |> 
   distinct(model_id) |> 
@@ -303,189 +410,7 @@ B <- temperature_skill |>
   theme_bw()
 
 cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'lr', labels = 'auto') |> 
-  ggsave(filename = './Plots/FigureS4.png', width = 19, height = 16, units = 'cm')
-```
-```{r}
-temp_skill_RW <- temperature_skill_RW |>
-  group_by(model_id) |>
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |>
-  ungroup() |>
-  filter(mean_crps < 0) |>
-  left_join(model_meta) |>
-  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
-         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'),
-         uses_AT = str_detect(NOAA_var, 'air_temperature')) |>
-  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
-  geom_bar_pattern(aes(pattern = as.factor(uses_AT)),
-                   stat = "identity",
-                   alpha = 0.8,
-                   pattern_fill = "black",
-                   pattern_colour = "black",
-                   pattern_spacing = 0.04,
-                   pattern_alpha = 1,
-                   colour = 'black') +
-  scale_y_reordered() +
-  labs(y='Model', x = 'Mean relative skill (°C)') +
-  geom_vline(xintercept = 0) +
-  scale_fill_manual(values = cols_modeltype) +
-  scale_pattern_manual(values=c('none', 'stripe')) +
-  scale_pattern_type_manual(values=c(NA, NA)) +
-  theme_bw(base_size = 10) +
-  guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02),
-                                title = 'Uses air temperature\nas a covariate?'),
-         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class')) +
-    theme(legend.box = 'horizontal')
-
-
-DO_skill_RW <- oxygen_skill_RW |>
-  group_by(model_id) |>
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |>
-  ungroup() |>
-  filter(mean_crps < 0) |>
-  left_join(model_meta) |>
-  mutate(manuscript_name = fct_reorder(manuscript_name, mean_crps),
-         uses_NOAA = ifelse(uses_NOAA == 1, 'yes', 'no'),
-         uses_AT = str_detect(NOAA_var, 'air_temperature')) |>
-  ggplot(aes(x=mean_crps, y = manuscript_name, fill = model_type)) +    # Different pattern for each group
-  geom_bar_pattern(aes(pattern = as.factor(uses_AT)),
-                   stat = "identity",
-                   alpha = 0.8,
-                   pattern_fill = "black",
-                   pattern_colour = "black",
-                   pattern_spacing = 0.04,
-                   pattern_alpha = 1,
-                   colour = 'black') +
-  scale_y_reordered() +
-  labs(y='Model', x = 'Mean relative skill (°C)') +
-  geom_vline(xintercept = 0) +
-  scale_fill_manual(values = cols_modeltype) +
-  scale_pattern_manual(values=c('none', 'stripe')) +
-  scale_pattern_type_manual(values=c(NA, NA)) +
-  theme_bw(base_size = 10) +
-  guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02),
-                                title = 'Uses air temperature\nas a covariate?'),
-         fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class')) +
-    theme(legend.box = 'horizontal')
-
-
-skill_summary_RW_nolegend <- skill_summary_RW +
-  theme(legend.position = 'none')
-
-
-skill_horizon_RW <- temperature_skill_RW |> 
-  filter(model_id %in% c(top_mods$model_id) & model_id != 'climatology', 
-         horizon > 0, 
-         horizon != 15,
-         horizon <=30) |> 
-  group_by(model_id, horizon) |> 
-  summarise(mean_crps = mean(skill_crps, na.rm = T)) |> 
-  left_join(select(model_meta, model_id, manuscript_name)) |> 
-  mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name))) |> 
-  ggplot(aes(x=horizon, 
-             y = mean_crps, colour = manuscript_name)) +
-  geom_hline(yintercept = 0, colour = 'grey40' ) + 
-  geom_line(linewidth = 0.8)  +  
-  labs(y='Mean relative skill (°C)', x = 'Horizon (days)') +
-  scale_colour_manual(name = 'Model',values = model_id_colours$value) +
-  theme_bw()
-
-ggpubr::ggarrange(ggarrange(NULL, as_ggplot(get_legend(skill_summary_RW)), NULL, NULL, widths =  c(0.2, 0.9,0.2, 1.1), nrow = 1),
-                  ggarrange(skill_summary_RW_nolegend,  NULL, skill_horizon_RW, align = 'h', widths =  c(0.9,0.05, 1.1), nrow = 1), 
-                  heights = c(0.5, 1),nrow = 2) |> 
-  ggsave(filename = 'Plots/FigureSnew.png', height = 17, width = 18, units = 'cm')
-
-
-ggsave(skill_horizon_RW, filename = 'Plots/FigureSnew1.png', height = 10, width = 13, units = 'cm')
-```
-
-
-```{r}
-null_scores_T <- temperature_scores |>
-  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) %>% 
-  filter(model_id %in% baselines$model_id, 
-         horizon > 0, 
-         horizon != 15,
-         horizon <=30) |> 
-  group_by(model_id, horizon) |> 
-  summarise(mean_crps = mean(crps, na.rm = T)) %>% 
-  mutate(model_id = factor(model_id, levels = c('climatology', 'persistenceRW'), labels = c("day-of-year", "persistence"))) %>% 
-  ggplot(aes(x=horizon,y = mean_crps, colour = model_id)) + 
-  geom_line() + 
-  scale_x_continuous(breaks = seq(2,30, 2)) + 
-  theme_bw() + 
-  labs(x= 'Horizon (days)', y = 'Mean CRPS (°C)', title = 'Water temperature') + 
-  scale_colour_viridis_d(name = 'Null Model', begin = 0.2, end=0.9) +
-  theme(panel.grid.minor = element_blank())
-
-null_scores_DO <- oxygen_scores |>
-  mutate(horizon = as.numeric(as_date(datetime) - as_date(reference_datetime))) %>% 
-  filter(model_id %in% baselines$model_id, 
-         horizon > 0, 
-         horizon != 15,
-         horizon <=30) |> 
-  group_by(model_id, horizon) |> 
-  summarise(mean_crps = mean(crps, na.rm = T)) %>% 
-  mutate(model_id = factor(model_id, levels = c('climatology', 'persistenceRW'), labels = c("day-of-year", "persistence"))) %>% 
-  ggplot(aes(x=horizon,y = mean_crps, colour = model_id)) + 
-  geom_line() + 
-  scale_x_continuous(breaks = seq(2,30, 2)) + 
-  theme_bw() + 
-  labs(x= 'Horizon (days)', y = 'Mean CRPS (mg/L)', title = 'Dissolved oxygen') + 
-  scale_colour_viridis_d(name = 'Null Model', begin = 0.2, end=0.9) +
-  theme(panel.grid.minor = element_blank())
-
-
-ggarrange(null_scores_T, null_scores_DO, common.legend = T) %>% 
-  ggsave(filename = 'Plots/Figure_Snew2.png', height = 10, width = 18, units = 'cm')
-```
-
-```{r}
-
-temp_skill_RW_summary <- temperature_skill_RW |> 
-  filter(model_id %in% c(top_mods$model_id) & model_id != 'climatology', 
-         horizon > 0, 
-         horizon != 15,
-         horizon <=30) |> 
-  group_by(model_id, horizon) |> 
-  summarise(mean_crpsRW = mean(skill_crps, na.rm = T)) |> 
-  left_join(select(model_meta, model_id, manuscript_name)) |> 
-  mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name)))
-
-temp_skill_clim_summary <- temperature_skill |> 
-  filter(model_id %in% c(top_mods$model_id) & model_id != 'persistence', 
-         horizon > 0, 
-         horizon != 15,
-         horizon <=30) |> 
-  group_by(model_id, horizon) |> 
-  summarise(mean_crpsDOY = mean(skill_crps, na.rm = T)) |> 
-  left_join(select(model_meta, model_id, manuscript_name)) |> 
-  mutate(manuscript_name = factor(manuscript_name, levels = levels(model_id_colours$manuscript_name)))
-
-
-null_model_beats <- full_join(temp_skill_clim_summary, temp_skill_RW_summary, 
-          by = join_by(model_id, horizon, manuscript_name)) %>% 
-  mutate(beats = ifelse(mean_crpsDOY < 0 & mean_crpsRW < 0, 'both',
-                        ifelse(mean_crpsDOY > 0 & mean_crpsRW < 0, 'RW',
-                               ifelse(mean_crpsDOY < 0 & mean_crpsRW > 0, 'DOY', 'none')))) %>% 
-  mutate(beats = factor(beats, levels = c("none", "RW", "DOY", "both"), labels = c("Neither", "Persistence", "Day-of-year", "Both"))) %>% 
-  na.omit() %>% 
-  ggplot(aes(x=horizon, y=manuscript_name, shape = beats, colour = beats)) + 
-  geom_point(size = 5) +
-  scale_shape_manual(values = c(0, 1, 4, 13), name = 'Null model that is out-performed') +
-  scale_colour_manual(values = c("grey90", "#455BCDFF", "#E1DD37FF", "#46F884FF"), name = 'Null model that is out-performed') +
-  scale_y_discrete(name = 'Model') +
-  scale_x_continuous(name = 'Horizon (days)', breaks = c(1,10, 20, 30), expand = c(0.02,0)) +
-  geom_hline(yintercept = seq(.5, 9.5, 1), linewidth = .2) +
-  theme(legend.position = "bottom", 
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        legend.text = element_text(size = 8),
-        legend.title = element_text(size = 8),
-        axis.ticks.y = element_blank())
-
-ggsave(null_model_beats, filename = 'Plots/Figure_Snew3.png', height = 10, width = 18, units = 'cm')
-
+  ggsave(filename = './Plots/FigureS7.png', width = 19, height = 16, units = 'cm')
 ```
 
 
