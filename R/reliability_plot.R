@@ -18,8 +18,8 @@ plot_reliability <- function(scores, models, CI, order = levels(models), alpha =
       geom_hline(yintercept = 95, colour = 'grey3', linetype = 'dashed', linewidth = 0.8)+
       geom_line(linewidth = 0.8, alpha = alpha) +
       labs(y = 'Percentage of observations within\n95% confidence intervals', x='Horizon (days)')  +
-      annotate('text', x = 30, y = 100, label = 'underconfident', size = 5, hjust = 1) +
-      annotate('text', x = 30, y = 75, label = 'overconfident', size = 5, hjust = 1)
+      annotate('text', x = 30, y = 100, label = 'underconfident', size = 4, hjust = 1) +
+      annotate('text', x = 30, y = 75, label = 'overconfident', size = 4, hjust = 1)
   }
   if (CI == 80) {
     plot <- scores |> 
@@ -39,8 +39,8 @@ plot_reliability <- function(scores, models, CI, order = levels(models), alpha =
       geom_hline(yintercept = 80, colour = 'grey3', linetype = 'dashed', linewidth = 0.8)+
       geom_line(linewidth = 0.8, alpha = alpha) +
       labs(y = 'Percentage of observations within\n80% confidence intervals', x='Horizon (days)') +
-      annotate('text', x = 30, y = 100, label = 'underconfident', size = 5, hjust = 1) +
-      annotate('text', x = 30, y = 75, label = 'overconfident', size = 5, hjust = 1)
+      annotate('text', x = 30, y = 100, label = 'underconfident', size = 4, hjust = 1) +
+      annotate('text', x = 30, y = 75, label = 'overconfident', size = 4, hjust = 1)
   }
   if (CI != 80 & CI != 95) {
     message('CI must be 80 or 95')

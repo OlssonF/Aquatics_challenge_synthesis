@@ -139,7 +139,7 @@ top10_temp <-
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
   scale_pattern_type_manual(values=c(NA, NA)) +
-  theme_bw(base_size = 10) +
+  theme_bw(base_size = 12) +
   guides(pattern = guide_legend(override.aes = list(fill = "white", pattern_spacing = 0.02),
                                 title = 'Uses air temperature\nas a covariate?'),
          fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class')) +
@@ -169,7 +169,7 @@ all_temp <-
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe'), name = 'Uses air temperature as a covariate?') +
   scale_pattern_type_manual(values=c(NA, NA), name = 'Uses air temperature as a covariate?') +
-  theme_bw(base_size = 10) + 
+  theme_bw(base_size = 12) + 
   guides(pattern = guide_legend(override.aes = list(fill = "white"), title = 'Uses air temperature as a covariate?'),
          fill = guide_legend(override.aes = list(pattern = "none"), title = 'Model class'))  +
   theme(legend.box = 'vertical')
@@ -198,7 +198,7 @@ all_DO <- oxygen_skill |>
   scale_fill_manual(values = cols_modeltype) +
   scale_pattern_manual(values=c('none', 'stripe')) +
   scale_pattern_type_manual(values=c(NA, NA)) +
-  theme_bw(base_size = 10) + 
+  theme_bw(base_size = 12) + 
   theme(legend.position = 'none')
 
 
@@ -208,7 +208,7 @@ ggpubr::ggarrange(top10_temp, ggarrange(as_ggplot(legend), NULL, ncol = 2, width
                   nrow = 2, ncol= 2, 
                   align = 'hv', heights = c(1, 1.3),
                   legend = 'none', labels = c('a', '', 'b', 'c')) |> 
-  ggsave(filename = 'Plots/Figure2.png', height = 20, width = 17, units = 'cm')
+  ggsave(filename = 'Plots/Figure2.png', height = 22, width = 18, units = 'cm')
 
 ```
 
@@ -230,7 +230,7 @@ skill <-
   geom_line(linewidth = 0.8)  +  
   labs(y='Mean relative skill (°C)', x = 'Horizon (days)') +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
-  theme_bw()
+  theme_bw(base_size = 12)
 
 
 
@@ -249,7 +249,8 @@ sd <- temperature_scores |>
   geom_line(linewidth = 0.8)+
   labs(y='Mean standard deviation (°C)', x = 'Horizon (days)') +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
-  theme_bw()
+  theme_bw(base_size = 12)
+
 
 bias <- temperature_scores |> 
   mutate(horizon = as_date(datetime) - as_date(reference_datetime),
@@ -267,7 +268,7 @@ bias <- temperature_scores |>
   geom_line(linewidth = 0.8)+
   labs(y='Mean absolute bias (°C)', x = 'Horizon (days)') +
   scale_colour_manual(name = 'Model',values = model_id_colours$value) +
-  theme_bw() +
+  theme_bw(base_size = 12) +
   coord_cartesian(ylim = c(0, 2))
 
 ggpubr::ggarrange(skill, 
@@ -289,20 +290,20 @@ good_80 <-
                    models = top_mods, # model_ids and manuscript names
                    CI = 80, 
                    order = levels(model_id_colours$manuscript_name)) +
-  scale_colour_manual(name = 'Top model',values = model_id_colours$value) +
-  scale_linetype_manual(name = 'Top model',values = model_id_colours$linetype) +
-  theme_bw() +
+  scale_colour_manual(name = 'Model',values = model_id_colours$value) +
+  scale_linetype_manual(name = 'Model',values = model_id_colours$linetype) +
+  theme_bw(base_size = 10) +
   scale_y_continuous(limits = c(54, 100)) +
   labs(title = 'Top performing models') +
-  theme(title = element_text(size = 14))
+  theme(title = element_text(size = 12))
 
 good_95 <- plot_reliability(scores = temperature_scores,
                             models = top_mods, 
                             CI = 95, 
                             order = levels(model_id_colours$manuscript_name)) +
-  scale_colour_manual(name = 'Top model',values = model_id_colours$value) +
-  scale_linetype_manual(name = 'Top model',values = model_id_colours$linetype) +
-  theme_bw() +
+  scale_colour_manual(name = 'Model',values = model_id_colours$value) +
+  scale_linetype_manual(name = 'Model',values = model_id_colours$linetype) +
+  theme_bw(base_size = 10) +
   scale_y_continuous(limits = c(54, 100))
 
 # get the list of bad models
@@ -316,28 +317,28 @@ bad_80 <-
                    CI = 80, 
                    order = bad_mods$manuscript_name,
                    alpha  = 0.6) +
-  theme_bw()  +
+  theme_bw(base_size = 10) +
   scale_colour_manual(name = '', values = unname(pals::cols25(n= 20)))+ 
   scale_linetype_manual(name = '', values = rep('solid', 20)) +
   theme(legend.position = 'none') +
-  labs(title = 'All other submitted models') +
-  theme(title = element_text(size = 14))
+  labs(title = 'Other submitted models') +
+  theme(title = element_text(size = 11.5))
 
 bad_95 <- plot_reliability(scores = temperature_scores,
                            models = bad_mods, 
                            CI = 95, 
                            order = bad_mods$manuscript_name,
                            alpha  =0.6) +
-  theme_bw() +
+  theme_bw(base_size = 10) +
   scale_y_continuous(limits = c(0, 100))   +
   scale_colour_manual(name = '', values = unname(pals::cols25(n= 20))) + 
   scale_linetype_manual(name = '', values = rep('solid', 20)) 
 
-ggarrange(NULL, ggarrange(get_legend(good_80), NULL, nrow = 2),
-          ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none', labels = 'auto', hjust = -4, vjust = 3), 
+ggarrange(NULL, ggarrange(get_legend(good_80), NULL, nrow = 2, heights = c(1,0.8)),
+          ggarrange(good_80, good_95, bad_80, bad_95, align = 'hv', legend= 'none', labels = 'auto', hjust = -4.5, vjust = 2), 
           ncol = 3, 
-          widths = c(0.1,1,5)) |> 
-  ggsave(filename = 'Plots/Figure4.png', height = 17.6, width = 23, units = 'cm')
+          widths = c(0.2,1.2,5)) |> 
+  ggsave(filename = 'Plots/Figure4.png', height = 15, width = 18, units = 'cm')
 ```
 
 ## Figure 5
@@ -374,7 +375,7 @@ A <- temperature_skill |>
   facet_wrap(~model_type, scales = 'free_y',nrow = 2) +
   labs(y='Site', x = 'Mean relative skill (°C)') +
   scale_colour_manual(values = cols_modeltype, name = 'Model class') +
-  theme_bw()  +
+  theme_bw(base_size =  12)  +
   theme(legend.position = 'bottom')
 
 
@@ -397,10 +398,10 @@ B <- temperature_skill |>
   geom_line(linewidth = 0.8)  +  
   labs(y='Mean relative skill (°C)', x = 'Horizon (days)') +
   scale_colour_brewer(palette = 'Dark2', name = 'Site')+
-  theme_bw()
+  theme_bw(base_size =  12) 
 
 cowplot::plot_grid(A, B, nrow = 2, rel_heights = c(1.5, 1), align = 'v', axis = 'tlbr', labels = 'auto') |> 
-  ggsave(filename = './Plots/Figure5.png', width = 19, height = 16, units = 'cm')
+  ggsave(filename = './Plots/Figure5.png', width = 18, height = 15, units = 'cm')
 ```
 
 ## Figure 6
@@ -445,7 +446,7 @@ obs_diff <-
          month = as_date(paste('2023', month, '01', sep = '-'))) |> 
   ggplot()  +
   geom_hline(yintercept = 0) +
-  theme_bw() +
+  theme_bw(base_size =  12)  +
   annotate("rect", 
            xmax = rep(as_date('2024-01-01'),8), 
            xmin = rep(as_date('2022-01-01'), 8),
@@ -455,7 +456,7 @@ obs_diff <-
   geom_line(aes(x=month, y=delta, colour = site_id)) +
   geom_point(aes(x=month, y=delta, colour = site_id)) +
   scale_x_date(date_labels = "%b", breaks = '1 month') +
-  labs(y = 'Difference in median monthly water temperature (°C)', 
+  labs(y = 'Difference in median monthly\nwater temperature (°C)', 
        x = 'Month') +
   coord_cartesian(xlim = c(as_date('2023-01-01'), 
                            as_date('2023-12-01')),
