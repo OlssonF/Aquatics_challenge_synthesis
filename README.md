@@ -25,9 +25,15 @@ Note: If you do not have the required packages run the install_packages.R script
 ------------------------------------------------------------------------
 
 Olsson, F., Thomas, R. Q., & Carey, C. C. (2024). What can we learn from 100,000 freshwater forecasts? A synthesis from the NEON Ecological Forecasting Challenge: scripts. Zenodo. https://doi.org/10.5281/zenodo.11093206 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13904345.svg)](https://doi.org/10.5281/zenodo.13904345)
 
 Olsson, F., Carey, C. C., Carl, B., Gregory, H., Ladwig, R., Lapeyrolerie, M., Lewis, A. S. L., Lofton, M., Montetealegre-Mora, F., Rabaey, J. S., Robbins, C. J., Yang, X., & Thomas, R. Q. (2024). 
 What can we learn from 100,000 freshwater forecasts? A synthesis from the NEON Ecological Forecasting Challenge: scores and targets [Data set]. Zenodo. https://doi.org/10.5281/zenodo.11087208
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.11087208.svg)](https://doi.org/10.5281/zenodo.11087208)
+
+Olsson, F., Carey, C. C., Boettiger, C., Harrison, G., Ladwig, R., Lapeyrolerie, M., Lewis, A. S. L., Montetealegre-Mora, F., Rabaey, J. S., Robbins, C. J., Yang, X., & Thomas, R. Q. (2024). What can we learn from 100,000 freshwater forecasts? A synthesis from the NEON Ecological Forecasting Challenge: model archive. Zenodo. https://doi.org/10.5281/zenodo.13750779
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13750779.svg)](https://doi.org/10.5281/zenodo.13750779)
+
 
 ------------------------------------------------------------------------
 
